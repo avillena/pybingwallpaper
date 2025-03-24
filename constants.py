@@ -3,7 +3,7 @@ from pathlib import Path
 
 class Constants:
     """Centraliza las constantes de la aplicación."""
-    APP_NAME = "BingWallpaper"
+    APP_NAME = "PyBingWallpaper"
     APP_VERSION = "1.0.0"
     APP_COPYRIGHT = "Copyright © Python Version 2025"
     

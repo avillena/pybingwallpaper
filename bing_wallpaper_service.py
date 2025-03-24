@@ -329,32 +329,6 @@ class WallpaperManager:
         except Exception as e:
             self.log_error(f"Error al establecer el fondo de pantalla: {str(e)}")
     
-    def get_current_wallpaper(self):
-        """Obtiene la información del wallpaper actual."""
-        self.load_favorites()  # Recarga los favoritos para tener la lista actualizada
-        
-        if self.current_source == WallpaperServiceConstants.SOURCE_BING:
-            if not self.wallpaper_history:
-                return None
-            current = self.wallpaper_history[self.current_wallpaper_index].copy()
-            current["current_index"] = self.current_wallpaper_index
-            return current
-        else:  # Favoritos
-            if not self.favorites or self.current_wallpaper_index >= len(self.favorites):
-                return None
-            return self.favorites[self.current_wallpaper_index]
-    
-    def get_wallpaper_count(self):
-        """Obtiene el número de wallpapers disponibles en la fuente actual."""
-        if self.current_source == WallpaperServiceConstants.SOURCE_BING:
-            return len(self.wallpaper_history)
-        else:  # Favoritos
-            return len(self.favorites)
-    
-    def get_total_wallpaper_count(self):
-        """Obtiene el número total de wallpapers disponibles."""
-        return len(self.wallpaper_history) + len(self.favorites)
-    
     def navigate_to_wallpaper(self, index, source=None):
         """
         Navega a un wallpaper específico por índice.
@@ -386,11 +360,21 @@ class WallpaperManager:
         # Si el wallpaper no existe, intentamos descargarlo (solo para Bing)
         if not wallpaper_file.exists() and source == WallpaperServiceConstants.SOURCE_BING:
             try:
+                self.log_error(f"Descargando wallpaper para índice {index}...")
                 response = requests.get(wallpaper["picture_url"])
                 response.raise_for_status()
                 with open(wallpaper_file, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=WallpaperServiceConstants.DOWNLOAD_CHUNK_SIZE):
                         f.write(chunk)
+                        
+                # También descargamos o actualizamos la miniatura
+                thumb_file = Constants.get_thumbnail_file(index)
+                if not thumb_file.exists():
+                    thumb_response = requests.get(wallpaper["thumbnail_url"])
+                    thumb_response.raise_for_status()
+                    with open(thumb_file, 'wb') as f:
+                        f.write(thumb_response.content)
+                        
             except Exception as e:
                 self.log_error(f"Error al descargar wallpaper {index}: {str(e)}")
                 return False
@@ -399,12 +383,61 @@ class WallpaperManager:
         if not wallpaper_file.exists():
             return False
         
-        # Establece el wallpaper
-        self.set_wallpaper(str(wallpaper_file))
+        # Actualizamos PRIMERO los índices y la fuente, antes de cambiar el wallpaper
+        # para evitar desincronizaciones
         self.current_wallpaper_index = index
         self.current_source = source
+        
+        # Guardamos el estado actualizado
         self.save_state()
+        
+        # Solo ahora establecemos el wallpaper
+        self.set_wallpaper(str(wallpaper_file))
+        
+        # Notificamos a los callbacks con los datos actualizados
+        for callback in self.wallpaper_changed_callbacks:
+            # Pasamos la información completa del wallpaper actual
+            callback(self.get_current_wallpaper())
+            
         return True
+
+    def get_current_wallpaper(self):
+        """Obtiene la información del wallpaper actual."""
+        # Recarga los favoritos para tener la lista actualizada
+        self.load_favorites()  
+        
+        if self.current_source == WallpaperServiceConstants.SOURCE_BING:
+            if not self.wallpaper_history or self.current_wallpaper_index >= len(self.wallpaper_history):
+                return None
+            # Creamos una copia para evitar modificaciones accidentales
+            current = self.wallpaper_history[self.current_wallpaper_index].copy()
+            # Añadimos metadatos adicionales
+            current["current_index"] = self.current_wallpaper_index
+            current["total_images"] = len(self.wallpaper_history)
+            current["source_name"] = "Bing Wallpaper"
+            # Añadimos ruta del archivo
+            current["file_path"] = str(Constants.get_wallpaper_file(self.current_wallpaper_index))
+            return current
+        else:  # Favoritos
+            if not self.favorites or self.current_wallpaper_index >= len(self.favorites):
+                return None
+            # Para favoritos, añadimos metadatos adicionales
+            favorite = self.favorites[self.current_wallpaper_index].copy()
+            favorite["total_images"] = len(self.favorites)
+            favorite["current_index"] = self.current_wallpaper_index
+            return favorite    
+    
+    def get_wallpaper_count(self):
+        """Obtiene el número de wallpapers disponibles en la fuente actual."""
+        if self.current_source == WallpaperServiceConstants.SOURCE_BING:
+            return len(self.wallpaper_history)
+        else:  # Favoritos
+            return len(self.favorites)
+    
+    def get_total_wallpaper_count(self):
+        """Obtiene el número total de wallpapers disponibles."""
+        return len(self.wallpaper_history) + len(self.favorites)
+    
     
     def navigate_to_previous_wallpaper(self):
         """
@@ -413,8 +446,27 @@ class WallpaperManager:
         """
         # Primero intenta navegar dentro de la colección actual
         if self.current_source == WallpaperServiceConstants.SOURCE_BING:
-            # Si hay más wallpapers de Bing, navega a ellos
+            # Si hay más wallpapers de Bing (más antiguos), navega a ellos
             if self.current_wallpaper_index < len(self.wallpaper_history) - 1:
+                # Verificamos primero que exista o pueda descargarse la miniatura
+                next_idx = self.current_wallpaper_index + 1
+                if next_idx < len(self.wallpaper_history):
+                    next_wallpaper = self.wallpaper_history[next_idx]
+                    thumb_file = Constants.get_thumbnail_file(next_idx)
+                    
+                    # Intentamos descargar la miniatura si no existe
+                    if not thumb_file.exists() and "thumbnail_url" in next_wallpaper:
+                        try:
+                            # Registramos en el log este intento
+                            self.log_error(f"Pre-descargando miniatura para el índice {next_idx}...")
+                            response = requests.get(next_wallpaper["thumbnail_url"])
+                            response.raise_for_status()
+                            with open(thumb_file, 'wb') as f:
+                                f.write(response.content)
+                        except Exception as e:
+                            self.log_error(f"Error al pre-descargar miniatura {next_idx}: {str(e)}")
+                    
+                # Ahora intentamos navegar
                 return self.navigate_to_wallpaper(self.current_wallpaper_index + 1)
             # Si no hay más wallpapers de Bing pero hay favoritos, cambia a favoritos
             elif self.favorites:
@@ -426,7 +478,7 @@ class WallpaperManager:
         
         # Si llegamos aquí, no pudimos navegar a un wallpaper anterior
         return False
-    
+
     def navigate_to_next_wallpaper(self):
         """
         Navega al wallpaper siguiente.
@@ -443,10 +495,31 @@ class WallpaperManager:
         else:  # Estamos en Bing
             # Si podemos navegar hacia atrás en Bing, lo hacemos
             if self.current_wallpaper_index > 0:
+                # Verificamos primero que exista la miniatura
+                prev_idx = self.current_wallpaper_index - 1
+                if prev_idx >= 0 and prev_idx < len(self.wallpaper_history):
+                    prev_wallpaper = self.wallpaper_history[prev_idx]
+                    thumb_file = Constants.get_thumbnail_file(prev_idx)
+                    
+                    # Intentamos descargar la miniatura si no existe
+                    if not thumb_file.exists() and "thumbnail_url" in prev_wallpaper:
+                        try:
+                            # Registramos en el log este intento
+                            self.log_error(f"Pre-descargando miniatura para el índice {prev_idx}...")
+                            response = requests.get(prev_wallpaper["thumbnail_url"])
+                            response.raise_for_status()
+                            with open(thumb_file, 'wb') as f:
+                                f.write(response.content)
+                        except Exception as e:
+                            self.log_error(f"Error al pre-descargar miniatura {prev_idx}: {str(e)}")
+                
                 return self.navigate_to_wallpaper(self.current_wallpaper_index - 1)
         
         # Si llegamos aquí, no pudimos navegar a un wallpaper siguiente
-        return False
+        return False    
+    
+    
+    
     
     def add_current_to_favorites(self):
         """

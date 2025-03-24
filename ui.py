@@ -609,12 +609,45 @@ class WallpaperNavigatorWindow(QDialog):
                 }}
             """)
     
+    
+
     def update_content(self):
         """Actualiza el contenido de la ventana con el wallpaper actual."""
+        # Obtenemos la información ACTUALIZADA del wallpaper actual
         current_wallpaper = self.wallpaper_manager.get_current_wallpaper()
+        
+        # MEJORA: Manejar correctamente el caso de inicio en frío
         if not current_wallpaper:
+            # Verificamos si ya tenemos un contador de intentos
+            retry_count = getattr(self, "_retry_count", 0)
+            
+            if retry_count > 10:  # Máximo 10 intentos (10 segundos)
+                # Después de varios intentos, mostramos mensaje más claro
+                self.title_label.setText("No se pudo cargar el wallpaper")
+                self.copyright_label.setText("Intente más tarde o reinicie la aplicación")
+                # Reseteamos contador para futuros intentos
+                self._retry_count = 0
+                return
+            
+            # Mostramos mensaje de carga con contador
+            self.title_label.setText(f"Descargando imagen de Bing... ({retry_count+1})")
+            self.copyright_label.setText("Por favor espere mientras se obtienen los datos iniciales")
+            
+            # Limpiamos miniatura anterior si existe
+            self.thumbnail_label.clear()
+            self.thumbnail_label.setText("Cargando...")
+            
+            # Incrementamos contador para siguiente intento
+            self._retry_count = retry_count + 1
+            
+            # Programamos nuevo intento en 1 segundo
+            QTimer.singleShot(1000, self.update_content)
             return
         
+        # Si llegamos aquí, tenemos datos - reseteamos contador
+        self._retry_count = 0
+        
+        # Resto del método original
         # Aplicar factor de zoom
         zoom = self.zoom_factor
         
@@ -635,6 +668,32 @@ class WallpaperNavigatorWindow(QDialog):
             thumb_height = int(UIConstants.THUMB_HEIGHT * zoom)
             self.thumbnail_label.setPixmap(pixmap.scaled(
                 thumb_width, thumb_height, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            # Si no existe la miniatura, intentamos descargarla si tenemos URL
+            if self.wallpaper_manager.current_source == "bing" and "thumbnail_url" in current_wallpaper:
+                try:
+                    self.thumbnail_label.setText("Descargando miniatura...")
+                    QApplication.processEvents()  # Forzamos actualización de UI
+                    
+                    response = requests.get(current_wallpaper["thumbnail_url"])
+                    response.raise_for_status()
+                    with open(thumb_file, 'wb') as f:
+                        f.write(response.content)
+                    
+                    # Intentamos mostrar la imagen recién descargada
+                    if thumb_file.exists():
+                        pixmap = QPixmap(str(thumb_file))
+                        thumb_width = int(UIConstants.THUMB_WIDTH * zoom)
+                        thumb_height = int(UIConstants.THUMB_HEIGHT * zoom)
+                        self.thumbnail_label.setPixmap(pixmap.scaled(
+                            thumb_width, thumb_height, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                    else:
+                        self.thumbnail_label.setText("No se pudo cargar la imagen")
+                except Exception as e:
+                    print(f"Error al descargar miniatura: {str(e)}")
+                    self.thumbnail_label.setText("Error al descargar")
+            else:
+                self.thumbnail_label.setText("Imagen no disponible")
         
         # Parsea y formatea mejor el título y copyright
         if "copyright" in current_wallpaper:
@@ -649,12 +708,29 @@ class WallpaperNavigatorWindow(QDialog):
             
             self.title_label.setText(title)
             self.copyright_label.setText(copyright_text)
+        else:
+            self.title_label.setText("Sin título disponible")
+            self.copyright_label.setText("")
+        
+        # Muestra la fuente actual en la interfaz
+        if self.wallpaper_manager.current_source == "favorite":
+            if not self.title_label.text().startswith("⭐"):
+                self.title_label.setText(f"⭐ {self.title_label.text()}")
         
         # Actualiza los botones de navegación
+        self.update_navigation_buttons()
+        
+        # Actualiza el estado del botón de favorito
+        self.update_favorite_button()
+
+    def update_navigation_buttons(self):
+        """Actualiza el estado de los botones de navegación."""
+        # Obtenemos información actualizada
         wallpaper_count = self.wallpaper_manager.get_wallpaper_count()
         current_idx = self.wallpaper_manager.current_wallpaper_index
         
-        # Lógica avanzada para los botones de navegación
+        # Lógica revisada para los botones de navegación
+        # "Anterior" navega a wallpapers más antiguos (índices mayores)
         can_go_previous = (
             # Hay más wallpapers en la colección actual
             (current_idx < wallpaper_count - 1) or 
@@ -662,6 +738,7 @@ class WallpaperNavigatorWindow(QDialog):
             (self.wallpaper_manager.current_source == "bing" and len(self.wallpaper_manager.favorites) > 0)
         )
         
+        # "Siguiente" navega a wallpapers más recientes (índices menores)
         can_go_next = (
             # Hay wallpapers anteriores en la colección actual
             (current_idx > 0) or 
@@ -671,23 +748,22 @@ class WallpaperNavigatorWindow(QDialog):
         
         self.prev_button.setEnabled(can_go_previous)
         self.next_button.setEnabled(can_go_next)
-        
-        # Muestra la fuente actual en la interfaz
-        if self.wallpaper_manager.current_source == "favorite":
-            self.title_label.setText(f"⭐ {self.title_label.text()}")
-        
-        # Actualiza el estado del botón de favorito
-        self.update_favorite_button()
-    
+
     def navigate_to_previous(self):
-        """Navega al wallpaper anterior."""
+        """Navega al wallpaper anterior (más antiguo)."""
         if self.wallpaper_manager.navigate_to_previous_wallpaper():
+            # Aquí hay un punto clave: Después de la navegación,
+            # actualizamos el contenido de forma explícita
             self.update_content()
-    
+
     def navigate_to_next(self):
-        """Navega al wallpaper siguiente."""
+        """Navega al wallpaper siguiente (más reciente)."""
         if self.wallpaper_manager.navigate_to_next_wallpaper():
-            self.update_content()
+            # Actualizamos el contenido después de la navegación
+            self.update_content()    
+    
+    
+    
     
     def mousePressEvent(self, event):
         """Gestiona el evento de pulsación del ratón para mover la ventana."""
