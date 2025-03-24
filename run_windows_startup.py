@@ -1,4 +1,3 @@
-## File: run_windows_startup.py
 import os
 import sys
 import winreg

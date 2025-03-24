@@ -1,4 +1,3 @@
-## File: ui.py
 import os
 import subprocess
 from PyQt5.QtCore import Qt, QSize, QTimer, QEvent
@@ -12,6 +11,7 @@ from constants import Constants
 from run_windows_startup import StartupManager
 from wallpaper_favorites import WallpaperFavorites
 from pathlib import Path
+
 # Constantes locales para la interfaz de usuario
 class UIConstants:
     """Constantes específicas para la interfaz de usuario."""
@@ -203,15 +203,53 @@ class WallpaperNavigatorWindow(QDialog):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Popup)
         self.setAttribute(Qt.WA_TranslucentBackground)
         
+        # Guardamos una referencia al factor de zoom
+        self.zoom_factor = self.wallpaper_manager.get_zoom_factor()
+        
+        # Registramos el callback para cuando cambie el zoom
+        self.wallpaper_manager.add_zoom_changed_callback(self.on_zoom_changed)
+        
+        # Inicializamos la interfaz
+        self.init_ui()
+        self.update_content()
+        self.update_window_size()
+    
+    def update_window_size(self):
+        """Actualiza el tamaño de la ventana según el factor de zoom."""
         # Aplicar el factor de zoom a las dimensiones base
         base_width, base_height = Constants.UI_NAV_BASE_WIDTH, Constants.UI_NAV_BASE_HEIGHT
-        scaled_width = int(base_width * Constants.ZOOM_FACTOR)
-        scaled_height = int(base_height * Constants.ZOOM_FACTOR)
+        scaled_width = int(base_width * self.zoom_factor)
+        scaled_height = int(base_height * self.zoom_factor)
         self.setFixedSize(scaled_width, scaled_height)
         
-        # Posiciona la ventana sobre el system tray
+        # Reposiciona la ventana
         self.position_window()
+    
+    def on_zoom_changed(self, new_zoom_factor):
+        """Manejador para cuando cambia el factor de zoom."""
+        self.zoom_factor = new_zoom_factor
         
+        # Recreamos la interfaz con el nuevo factor de zoom
+        self.recreate_ui()
+    
+    def recreate_ui(self):
+        """Recrea la interfaz de usuario con el nuevo factor de zoom."""
+        # Limpiamos cualquier widget existente
+        if self.layout():
+            # Eliminar todos los widgets del layout
+            while self.layout().count():
+                item = self.layout().takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+            
+            # Eliminar el layout
+            QWidget().setLayout(self.layout())
+        
+        # Actualizamos el tamaño de la ventana
+        self.update_window_size()
+        
+        # Recreamos la interfaz
         self.init_ui()
         self.update_content()
     
@@ -228,7 +266,7 @@ class WallpaperNavigatorWindow(QDialog):
     def init_ui(self):
         """Inicializa la interfaz de usuario."""
         # Factor de zoom para escalar elementos
-        zoom = Constants.ZOOM_FACTOR
+        zoom = self.zoom_factor
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -462,7 +500,7 @@ class WallpaperNavigatorWindow(QDialog):
     
     def show_settings_menu(self):
         """Muestra el menú de configuración."""
-        zoom = Constants.ZOOM_FACTOR
+        zoom = self.zoom_factor
         
         settings_menu = QMenu(self)
         settings_menu.setStyleSheet(f"""
@@ -489,25 +527,20 @@ class WallpaperNavigatorWindow(QDialog):
         run_startup_action.setChecked(StartupManager.get_run_on_startup())
         run_startup_action.triggered.connect(lambda checked: StartupManager.set_run_on_startup(checked))
         
-        # Opción para ajustar zoom (solo modifica el archivo de configuración)
+        # Opción para ajustar zoom
         zoom_menu = settings_menu.addMenu("Ajustar tamaño")
         
         for name, factor in Constants.ZOOM_OPTIONS:
             zoom_action = zoom_menu.addAction(name)
             zoom_action.setCheckable(True)
-            zoom_action.setChecked(abs(Constants.ZOOM_FACTOR - factor) < 0.1)
+            zoom_action.setChecked(abs(self.zoom_factor - factor) < 0.1)
             
-            # Función para mostrar un mensaje informativo sobre cómo aplicar el cambio
-            def show_zoom_info(new_factor=factor):
-                msg = QMessageBox(self)
-                msg.setWindowTitle("Cambio de tamaño")
-                msg.setText(f"Para cambiar el tamaño a {name}, modifica la constante ZOOM_FACTOR a {new_factor} en el archivo principal.")
-                msg.setInformativeText("Los cambios se aplicarán al reiniciar la aplicación.")
-                msg.setIcon(QMessageBox.Information)
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.exec_()
+            # Función para aplicar el cambio de zoom
+            def apply_zoom(checked, new_factor=factor):
+                if checked:
+                    self.wallpaper_manager.set_zoom_factor(new_factor)
             
-            zoom_action.triggered.connect(show_zoom_info)
+            zoom_action.triggered.connect(apply_zoom)
         
         settings_menu.addSeparator()
         
@@ -542,7 +575,7 @@ class WallpaperNavigatorWindow(QDialog):
         is_favorite = self.wallpaper_manager.is_current_favorite() is not None
         
         # Actualizar el estilo y texto del botón
-        zoom = Constants.ZOOM_FACTOR
+        zoom = self.zoom_factor
         if is_favorite:
             self.favorite_btn.setText(UIConstants.FAVORITE_ICON_ACTIVE)
             self.favorite_btn.setStyleSheet(f"""
@@ -583,7 +616,7 @@ class WallpaperNavigatorWindow(QDialog):
             return
         
         # Aplicar factor de zoom
-        zoom = Constants.ZOOM_FACTOR
+        zoom = self.zoom_factor
         
         # Actualiza la miniatura
         idx = self.wallpaper_manager.current_wallpaper_index

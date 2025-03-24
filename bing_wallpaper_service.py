@@ -1,5 +1,3 @@
-## File: bing_wallpaper_service.py
-
 import os
 import json
 import time
@@ -39,8 +37,10 @@ class WallpaperManager:
     def __init__(self):
         """Inicializa el gestor de fondos de pantalla."""
         self.state = self.load_state()
+        self.zoom_factor = self.state.get("zoom_factor", Constants.DEFAULT_ZOOM_FACTOR)
         self.download_completed_callbacks = []
         self.wallpaper_changed_callbacks = []
+        self.zoom_changed_callbacks = []
         self.running = False
         self.thread = None
         self.wallpaper_history = []
@@ -62,6 +62,10 @@ class WallpaperManager:
         """Agrega un callback para cuando cambia el fondo de pantalla."""
         self.wallpaper_changed_callbacks.append(callback)
     
+    def add_zoom_changed_callback(self, callback):
+        """Agrega un callback para cuando cambia el zoom."""
+        self.zoom_changed_callbacks.append(callback)
+    
     def load_state(self):
         """Carga el estado desde el archivo."""
         state_file = Constants.get_state_file()
@@ -79,7 +83,8 @@ class WallpaperManager:
             "copyright": "",
             "history": [],
             "current_source": WallpaperServiceConstants.SOURCE_BING,
-            "current_index": 0
+            "current_index": 0,
+            "zoom_factor": Constants.DEFAULT_ZOOM_FACTOR
         }
     
     def save_state(self):
@@ -88,6 +93,7 @@ class WallpaperManager:
             self.state["history"] = self.wallpaper_history
             self.state["current_source"] = self.current_source
             self.state["current_index"] = self.current_wallpaper_index
+            self.state["zoom_factor"] = self.zoom_factor
             with open(Constants.get_state_file(), 'w') as f:
                 json.dump(self.state, f, indent=4)
         except Exception as e:
@@ -104,6 +110,23 @@ class WallpaperManager:
         except Exception:
             pass  # Si no podemos escribir en el log, simplemente continuamos
     
+    def get_zoom_factor(self):
+        """Obtiene el factor de zoom actual."""
+        return self.zoom_factor
+    
+    def set_zoom_factor(self, zoom_factor):
+        """Establece un nuevo factor de zoom y notifica a los interesados."""
+        if self.zoom_factor != zoom_factor:
+            self.zoom_factor = zoom_factor
+            self.save_state()
+            
+            # Notificar a los callbacks sobre el cambio de zoom
+            for callback in self.zoom_changed_callbacks:
+                callback(zoom_factor)
+            
+            return True
+        return False
+        
     def start(self):
         """Inicia el proceso de actualización del fondo de pantalla."""
         if self.thread and self.thread.is_alive():
@@ -507,4 +530,3 @@ class WallpaperManager:
             return self.remove_from_favorites(favorite_id)
         else:
             return self.add_current_to_favorites()
-

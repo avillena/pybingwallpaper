@@ -1,4 +1,3 @@
-## File: app.py
 import os
 import sys
 import psutil
@@ -67,6 +66,32 @@ class BingWallpaperApp:
         
         # Agrega método para acceso a la ventana principal
         self.app.access_app_window = self.show_main_window
+        
+        # Registra un callback para recrear las ventanas cuando cambie el zoom
+        self.wallpaper_manager.add_zoom_changed_callback(self.handle_zoom_change)
+    
+    def handle_zoom_change(self, new_zoom_factor):
+        """Maneja el cambio en el factor de zoom."""
+        # Si las ventanas existen, las recreamos con el nuevo zoom
+        if hasattr(self, 'navigator_window') and self.navigator_window:
+            # La ventana de navegación se actualiza automáticamente a través de su propio callback
+            pass
+            
+        if hasattr(self, 'main_window') and self.main_window:
+            # Guardamos el estado de visibilidad de la ventana principal
+            was_visible = self.main_window.isVisible()
+            
+            # Cerramos la ventana actual
+            self.main_window.close()
+            
+            # Creamos una nueva ventana con el zoom actualizado
+            self.main_window = MainWindow(self.wallpaper_manager)
+            
+            # Restauramos la visibilidad
+            if was_visible:
+                self.main_window.show()
+                self.main_window.raise_()
+                self.main_window.activateWindow()
     
     def setup_app_icon(self):
         """Configura el icono de la aplicación."""

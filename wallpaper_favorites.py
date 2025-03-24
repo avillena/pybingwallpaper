@@ -1,4 +1,3 @@
-## File: wallpaper_favorites.py
 import os
 import json
 import shutil
@@ -197,4 +196,3 @@ class WallpaperFavorites:
         except Exception as e:
             print(f"Error al abrir carpeta de favoritos: {str(e)}")
             return False
-

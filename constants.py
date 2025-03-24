@@ -1,4 +1,3 @@
-## File: constants.py
 import os
 from pathlib import Path
 
@@ -13,8 +12,16 @@ class Constants:
     TEXT_COLOR = "#FFFFFF"
     HIGHLIGHT_COLOR = "#3B78FF"
     
-    # Factor de zoom para la interfaz (1.0 = tamaño normal)
-    ZOOM_FACTOR = 1.3  # Puedes ajustar este valor para cambiar el tamaño global
+    # Opciones de tamaño de zoom
+    ZOOM_OPTIONS = [
+        ("Pequeño", 1.0),
+        ("Mediano", 1.3),
+        ("Grande", 1.6),
+        ("Muy grande", 2.0)
+    ]
+    
+    # Factor de zoom predeterminado para la interfaz
+    DEFAULT_ZOOM_FACTOR = 1.3
     
     # Tiempo de espera entre comprobaciones (segundos)
     CHECK_INTERVAL = 3600  # 1 hora
@@ -23,14 +30,6 @@ class Constants:
     
     # Número de días de historial a mantener
     HISTORY_DAYS = 7
-    
-    # Opciones de tamaño de zoom
-    ZOOM_OPTIONS = [
-        ("Pequeño", 1.0),
-        ("Mediano", 1.3),
-        ("Grande", 1.6),
-        ("Muy grande", 2.0)
-    ]
     
     # Parámetros de UI
     UI_BORDER_RADIUS = 10
