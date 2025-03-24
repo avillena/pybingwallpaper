@@ -3,7 +3,7 @@ import sys
 import psutil
 from pathlib import Path
 from PIL import Image, ImageDraw
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
 
@@ -11,33 +11,8 @@ from constants import Constants
 from bing_wallpaper_service import WallpaperManager
 from ui import MainWindow, WallpaperNavigatorWindow
 from run_windows_startup import StartupManager
-
-# Constantes locales para la aplicación principal
-class AppConstants:
-    """Constantes específicas para la aplicación principal."""
-    # Tamaño del icono de la aplicación
-    ICON_SIZE = 64
-    
-    # Valores para dibujar el icono
-    ICON_B_LEFT = 15
-    ICON_B_TOP = 10
-    ICON_B_WIDTH = 10
-    ICON_B_HEIGHT = 44
-    ICON_BOW_WIDTH = 20
-    ICON_BOW_HEIGHT = 10
-    ICON_BOW_TOP1 = 10
-    ICON_BOW_TOP2 = 22
-    ICON_BOW_TOP3 = 34
-    
-    # Colores para el icono
-    ICON_BG_COLOR = (0, 120, 212, 255)  # Azul de Bing
-    ICON_FG_COLOR = (255, 255, 255, 255)  # Blanco
-    
-    # Posición del icono en bandeja
-    TRAY_OFFSET = 20
-    
-    # Tiempo de espera para join de threads
-    THREAD_JOIN_TIMEOUT = 1.0
+from logger import log_info, log_error
+from file_utils import file_exists, write_json, delete_file
 
 class BingWallpaperApp:
     """Clase principal de la aplicación."""
@@ -68,7 +43,7 @@ class BingWallpaperApp:
         self.app.access_app_window = self.show_main_window
         
         # Registra un callback para recrear las ventanas cuando cambie el zoom
-        self.wallpaper_manager.add_zoom_changed_callback(self.handle_zoom_change)
+        self.wallpaper_manager.zoom_changed.connect(self.handle_zoom_change)
     
     def handle_zoom_change(self, new_zoom_factor):
         """Maneja el cambio en el factor de zoom."""
@@ -99,48 +74,42 @@ class BingWallpaperApp:
         icon_path = Constants.get_app_icon_file()
         
         # Si no existe el icono, crea uno básico usando Pillow
-        if not icon_path.exists():
+        if not file_exists(icon_path):
             try:
                 # Crea una imagen cuadrada con fondo azul de Bing
-                img = Image.new('RGBA', (AppConstants.ICON_SIZE, AppConstants.ICON_SIZE), AppConstants.ICON_BG_COLOR)
+                img = Image.new('RGBA', (Constants.UI.ICON_SIZE, Constants.UI.ICON_SIZE), 
+                               (0, 120, 212, 255))  # Azul de Bing
                 draw = ImageDraw.Draw(img)
                 
                 # Dibuja una forma de 'B' simplificada
-                b_left = AppConstants.ICON_B_LEFT
-                b_right = b_left + AppConstants.ICON_B_WIDTH
-                b_top = AppConstants.ICON_B_TOP
-                b_bottom = b_top + AppConstants.ICON_B_HEIGHT
+                b_left = 15
+                b_right = b_left + 10
+                b_top = 10
+                b_bottom = b_top + 44
                 
                 # Línea vertical
-                draw.rectangle((b_left, b_top, b_right, b_bottom), fill=AppConstants.ICON_FG_COLOR)
+                draw.rectangle((b_left, b_top, b_right, b_bottom), fill=(255, 255, 255, 255))
                 
                 # Líneas horizontales (tres arcos)
                 bow_left = b_right
-                bow_right = bow_left + AppConstants.ICON_BOW_WIDTH
+                bow_right = bow_left + 20
                 
                 # Arco superior
-                draw.rectangle((bow_left, AppConstants.ICON_BOW_TOP1, 
-                              bow_right, AppConstants.ICON_BOW_TOP1 + AppConstants.ICON_BOW_HEIGHT), 
-                              fill=AppConstants.ICON_FG_COLOR)
+                draw.rectangle((bow_left, 10, bow_right, 10 + 10), fill=(255, 255, 255, 255))
                 
                 # Arco medio
-                draw.rectangle((bow_left, AppConstants.ICON_BOW_TOP2, 
-                              bow_right, AppConstants.ICON_BOW_TOP2 + AppConstants.ICON_BOW_HEIGHT), 
-                              fill=AppConstants.ICON_FG_COLOR)
+                draw.rectangle((bow_left, 22, bow_right, 22 + 10), fill=(255, 255, 255, 255))
                 
                 # Arco inferior
-                draw.rectangle((bow_left, AppConstants.ICON_BOW_TOP3, 
-                              bow_right + 4, AppConstants.ICON_BOW_TOP3 + AppConstants.ICON_BOW_HEIGHT * 2), 
-                              fill=AppConstants.ICON_FG_COLOR)
+                draw.rectangle((bow_left, 34, bow_right + 4, 34 + 10 * 2), fill=(255, 255, 255, 255))
                 
                 # Guarda la imagen
                 img.save(str(icon_path))
-            except Exception:
-                # Si falla la creación, simplemente continuamos
-                pass
+            except Exception as e:
+                log_error(f"Error al crear icono: {str(e)}")
         
         # Establece el icono de la aplicación
-        self.app_icon = QIcon(str(icon_path) if icon_path.exists() else "")
+        self.app_icon = QIcon(str(icon_path) if file_exists(icon_path) else "")
         if not self.app_icon.isNull():
             self.app.setWindowIcon(self.app_icon)
     
@@ -199,7 +168,7 @@ class BingWallpaperApp:
         """Verifica si ya hay una instancia en ejecución."""
         lock_file = Constants.get_lock_file()
         
-        if lock_file.exists():
+        if file_exists(lock_file):
             # Comprueba si el proceso sigue en ejecución
             try:
                 with open(lock_file, 'r') as f:
@@ -208,40 +177,40 @@ class BingWallpaperApp:
                 # Intenta obtener el proceso con ese PID
                 if psutil.pid_exists(pid):
                     return False  # La aplicación ya está en ejecución
-            except Exception:
-                pass  # Si hay error, asumimos que el archivo está obsoleto
+            except Exception as e:
+                log_error(f"Error al verificar instancia: {str(e)}")
         
         # Crea el archivo de bloqueo con nuestro PID
         try:
             with open(lock_file, 'w') as f:
                 f.write(str(os.getpid()))
             return True
-        except Exception:
+        except Exception as e:
+            log_error(f"Error al crear archivo de bloqueo: {str(e)}")
             return True  # Si no podemos crear el archivo, continuamos de todos modos
     
     def send_show_message(self):
         """Envía un mensaje a la instancia en ejecución para mostrar la ventana."""
         try:
             show_signal = Constants.get_show_signal_file()
-            with open(show_signal, 'w') as f:
-                f.write("SHOW")
-        except Exception:
-            pass
+            write_json(show_signal, {"action": "SHOW"})
+        except Exception as e:
+            log_error(f"Error al enviar señal de mostrar: {str(e)}")
     
     def check_show_signals(self):
         """Comprueba si hay señales para mostrar la ventana."""
         show_signal = Constants.get_show_signal_file()
         
-        if show_signal.exists():
+        if file_exists(show_signal):
             try:
-                show_signal.unlink()  # Elimina el archivo
+                delete_file(show_signal)  # Elimina el archivo
                 self.show_navigator_window()
-            except Exception:
-                pass
+            except Exception as e:
+                log_error(f"Error al procesar señal de mostrar: {str(e)}")
             
         # Programa la próxima comprobación
         QApplication.instance().processEvents()
-        QTimer.singleShot(Constants.SIGNAL_CHECK_INTERVAL, self.check_show_signals)
+        QTimer.singleShot(Constants.Network.SIGNAL_CHECK_INTERVAL, self.check_show_signals)
     
     def show_main_window(self):
         """Muestra la ventana principal."""
@@ -282,7 +251,7 @@ class BingWallpaperApp:
             self.show_navigator_window()
         
         # Inicia la comprobación de señales para mostrar la ventana
-        QTimer.singleShot(Constants.SIGNAL_CHECK_INTERVAL, self.check_show_signals)
+        QTimer.singleShot(Constants.Network.SIGNAL_CHECK_INTERVAL, self.check_show_signals)
         
         # Ejecuta el bucle de eventos
         return self.app.exec_()
@@ -294,11 +263,9 @@ class BingWallpaperApp:
         
         # Elimina el archivo de bloqueo
         try:
-            lock_file = Constants.get_lock_file()
-            if lock_file.exists():
-                lock_file.unlink()
-        except Exception:
-            pass
+            delete_file(Constants.get_lock_file())
+        except Exception as e:
+            log_error(f"Error al eliminar archivo de bloqueo: {str(e)}")
 
 
 if __name__ == "__main__":

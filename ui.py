@@ -1,75 +1,19 @@
-import os
-import subprocess
+import requests
 from PyQt5.QtCore import Qt, QSize, QTimer, QEvent
-from PyQt5.QtGui import QIcon, QPixmap, QCursor, QPalette, QColor
-from PyQt5.QtWidgets import (QMainWindow, QLabel, QPushButton, QCheckBox, 
+from PyQt5.QtGui import QCursor, QPalette, QColor
+from PyQt5.QtWidgets import (QMainWindow, QLabel, QCheckBox, 
                              QVBoxLayout, QHBoxLayout, QWidget, QMenu, 
-                             QAction, QDialog, QFrame, QGraphicsDropShadowEffect,
-                             QMessageBox)
+                             QAction, QDialog, QFrame, QMessageBox,
+                             QApplication)
 
 from constants import Constants
 from run_windows_startup import StartupManager
 from wallpaper_favorites import WallpaperFavorites
 from pathlib import Path
-
-# Constantes locales para la interfaz de usuario
-class UIConstants:
-    """Constantes específicas para la interfaz de usuario."""
-    # Márgenes y espaciados
-    MAIN_MARGIN_H = 15
-    MAIN_MARGIN_V = 20
-    CONTENT_MARGIN = 4
-    CONTENT_PADDING_V = 8
-    CONTENT_SPACING = 12
-    HEADER_SPACING = 4
-    LAYOUT_SPACING = 6
-    NAV_MARGIN = 8
-    BUTTON_PADDING_H = 8
-    BUTTON_PADDING_V = 4
-    
-    # Estilos de texto
-    TITLE_FONT_SIZE = 24
-    VERSION_FONT_SIZE = 14
-    COPYRIGHT_FONT_SIZE = 11
-    BING_TITLE_FONT_SIZE = 13
-    BUTTON_FONT_SIZE = 14
-    NAV_TITLE_FONT_SIZE = 14
-    NAV_COPYRIGHT_FONT_SIZE = 10
-    NAV_BUTTON_FONT_SIZE = 12
-    MENU_FONT_SIZE = 12
-    
-    # Colores
-    LINK_COLOR = "#0066cc"
-    HOVER_COLOR = "rgba(255, 255, 255, 0.1)"
-    DISABLED_COLOR = "rgba(255, 255, 255, 0.3)"
-    MENU_BG_COLOR = "#2C2C2C"
-    MENU_BORDER_COLOR = "#3C3C3C"
-    THUMB_BG_COLOR = "#111111"
-    FAVORITE_COLOR = "#FFD700"  # Color dorado para favoritos
-    FAVORITE_HOVER_COLOR = "#FFC125"  # Color cuando se pasa el cursor
-    
-    # Tamaño de la miniatura en navegador
-    THUMB_WIDTH = 130
-    THUMB_HEIGHT = 95
-    
-    # Posicionamiento del navegador
-    TRAY_OFFSET_X = 20
-    TRAY_OFFSET_Y = 60
-    
-    # Límite de caracteres para título
-    TITLE_CHAR_LIMIT_FACTOR = 70
-    
-    # Borde de menú
-    MENU_BORDER_WIDTH = 1
-    MENU_BORDER_RADIUS = 8
-    MENU_PADDING = 5
-    MENU_ITEM_PADDING_V = 5
-    MENU_ITEM_PADDING_H = 20
-    MENU_ITEM_BORDER_RADIUS = 4
-    
-    # Iconos y símbolos
-    FAVORITE_ICON_ACTIVE = "★"   # Estrella llena
-    FAVORITE_ICON_INACTIVE = "☆"  # Estrella vacía
+from logger import log_error, log_info
+from resource_utils import open_url, open_folder
+from ui_components import create_label, create_button, create_container, load_pixmap
+from file_utils import file_exists
 
 class MainWindow(QMainWindow):
     """Ventana principal de la aplicación."""
@@ -78,7 +22,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         self.wallpaper_manager = wallpaper_manager
-        self.wallpaper_manager.add_download_completed_callback(self.update_state)
+        self.zoom_factor = self.wallpaper_manager.get_zoom_factor()
+        
+        # Conectar señal de descarga completada
+        self.wallpaper_manager.download_completed.connect(self.update_state)
         
         self.init_ui()
         self.update_state(self.wallpaper_manager.state)
@@ -86,27 +33,38 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         """Inicializa la interfaz de usuario."""
         self.setWindowTitle(Constants.APP_NAME)
-        self.setFixedSize(Constants.UI_MAIN_WIDTH, Constants.UI_MAIN_HEIGHT)
+        self.setFixedSize(Constants.UI.MAIN_WIDTH, Constants.UI.MAIN_HEIGHT)
         
         # Widget principal y layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(UIConstants.MAIN_MARGIN_H, 
-                                      UIConstants.MAIN_MARGIN_V, 
-                                      UIConstants.MAIN_MARGIN_H, 
-                                      UIConstants.MAIN_MARGIN_V)
+        main_layout.setContentsMargins(Constants.UI.MARGIN * 2, 
+                                      Constants.UI.MARGIN * 2, 
+                                      Constants.UI.MARGIN * 2, 
+                                      Constants.UI.MARGIN * 2)
         
         # Título y versión
-        title_label = QLabel(Constants.APP_NAME)
-        title_label.setStyleSheet(f"font-size: {UIConstants.TITLE_FONT_SIZE}px; font-weight: bold;")
+        title_label = create_label(
+            Constants.APP_NAME, 
+            Constants.UI.TITLE_FONT_SIZE, 
+            bold=True, 
+            zoom_factor=self.zoom_factor
+        )
         
-        version_label = QLabel(f"Version {Constants.APP_VERSION}")
-        version_label.setStyleSheet(f"font-size: {UIConstants.VERSION_FONT_SIZE}px;")
+        version_label = create_label(
+            f"Version {Constants.APP_VERSION}", 
+            Constants.UI.VERSION_FONT_SIZE, 
+            zoom_factor=self.zoom_factor
+        )
         
         # Copyright y enlace
-        self.copyright_label = QLabel(Constants.APP_COPYRIGHT)
-        self.copyright_label.setStyleSheet(f"font-size: {UIConstants.COPYRIGHT_FONT_SIZE}px; color: {UIConstants.LINK_COLOR};")
+        self.copyright_label = create_label(
+            Constants.APP_COPYRIGHT, 
+            Constants.UI.COPYRIGHT_FONT_SIZE, 
+            color=Constants.UI.LINK_COLOR, 
+            zoom_factor=self.zoom_factor
+        )
         self.copyright_label.setOpenExternalLinks(True)
         self.copyright_label.setCursor(Qt.PointingHandCursor)
         self.copyright_label.mousePressEvent = self.open_website
@@ -117,17 +75,33 @@ class MainWindow(QMainWindow):
         self.startup_checkbox.stateChanged.connect(self.toggle_startup)
         
         # Información de la imagen actual
-        self.image_title_label = QLabel("Cargando información de la imagen...")
-        self.image_title_label.setStyleSheet(f"font-size: {UIConstants.COPYRIGHT_FONT_SIZE}px; color: {UIConstants.LINK_COLOR};")
+        self.image_title_label = create_label(
+            "Cargando información de la imagen...", 
+            Constants.UI.COPYRIGHT_FONT_SIZE, 
+            color=Constants.UI.LINK_COLOR, 
+            zoom_factor=self.zoom_factor
+        )
         self.image_title_label.setCursor(Qt.PointingHandCursor)
         self.image_title_label.mousePressEvent = self.open_image_link
         
         # Estado de la aplicación
-        self.status_label = QLabel(f"{Constants.APP_NAME} está en funcionamiento.")
-        self.status_label.setStyleSheet(f"font-size: {UIConstants.COPYRIGHT_FONT_SIZE}px;")
+        self.status_label = create_label(
+            f"{Constants.APP_NAME} está en funcionamiento.", 
+            Constants.UI.COPYRIGHT_FONT_SIZE, 
+            zoom_factor=self.zoom_factor
+        )
         
         # Botón de salir
-        exit_button = QPushButton(f"Salir de {Constants.APP_NAME}")
+        exit_button = create_button(
+            f"Salir de {Constants.APP_NAME}", 
+            font_size=Constants.UI.BUTTON_FONT_SIZE, 
+            background=Constants.UI.HIGHLIGHT_COLOR, 
+            color=Constants.UI.TEXT_COLOR,
+            padding=(4, 8), 
+            border_radius=Constants.UI.BORDER_RADIUS, 
+            zoom_factor=self.zoom_factor, 
+            hover_color=Constants.UI.HOVER_COLOR
+        )
         exit_button.clicked.connect(self.exit_app)
         
         # Añadir widgets al layout
@@ -161,25 +135,13 @@ class MainWindow(QMainWindow):
     
     def open_website(self, event):
         """Abre el sitio web del proyecto."""
-        self.open_url(Constants.get_bing_website_url())
+        open_url(Constants.get_bing_website_url())
     
     def open_image_link(self, event):
         """Abre la URL de la imagen actual."""
         url = self.image_title_label.property("url")
         if url:
-            self.open_url(url)
-    
-    def open_url(self, url):
-        """Abre una URL en el navegador predeterminado."""
-        try:
-            # En Windows, esto abrirá la URL en el navegador predeterminado
-            os.startfile(url)
-        except Exception:
-            try:
-                # Intenta con subprocess como alternativa
-                subprocess.run(['start', url], shell=True, check=True)
-            except Exception:
-                pass  # Si falla, simplemente ignoramos el error
+            open_url(url)
     
     def closeEvent(self, event):
         """Maneja el evento de cierre de la ventana."""
@@ -189,7 +151,6 @@ class MainWindow(QMainWindow):
     
     def exit_app(self):
         """Cierra la aplicación completamente."""
-        from PyQt5.QtWidgets import QApplication
         QApplication.instance().quit()
 
 
@@ -207,7 +168,7 @@ class WallpaperNavigatorWindow(QDialog):
         self.zoom_factor = self.wallpaper_manager.get_zoom_factor()
         
         # Registramos el callback para cuando cambie el zoom
-        self.wallpaper_manager.add_zoom_changed_callback(self.on_zoom_changed)
+        self.wallpaper_manager.zoom_changed.connect(self.on_zoom_changed)
         
         # Inicializamos la interfaz
         self.init_ui()
@@ -217,7 +178,7 @@ class WallpaperNavigatorWindow(QDialog):
     def update_window_size(self):
         """Actualiza el tamaño de la ventana según el factor de zoom."""
         # Aplicar el factor de zoom a las dimensiones base
-        base_width, base_height = Constants.UI_NAV_BASE_WIDTH, Constants.UI_NAV_BASE_HEIGHT
+        base_width, base_height = Constants.UI.NAV_BASE_WIDTH, Constants.UI.NAV_BASE_HEIGHT
         scaled_width = int(base_width * self.zoom_factor)
         scaled_height = int(base_height * self.zoom_factor)
         self.setFixedSize(scaled_width, scaled_height)
@@ -255,13 +216,20 @@ class WallpaperNavigatorWindow(QDialog):
     
     def position_window(self):
         """Posiciona la ventana sobre el system tray."""
-        from PyQt5.QtWidgets import QApplication
         desktop = QApplication.desktop()
         screen_rect = desktop.availableGeometry()
         
-        # En Windows, el system tray suele estar en la esquina inferior derecha
-        self.move(screen_rect.width() - self.width() - UIConstants.TRAY_OFFSET_X, 
-                  screen_rect.height() - self.height() - UIConstants.TRAY_OFFSET_Y)
+        # Calculate position ensuring window stays within screen bounds
+        x_pos = min(screen_rect.width() - self.width() - Constants.UI.TRAY_OFFSET_X,
+                    screen_rect.width() - self.width())
+        y_pos = min(screen_rect.height() - self.height() - Constants.UI.TRAY_OFFSET_Y,
+                    screen_rect.height() - self.height())
+        
+        # Ensure positions are positive
+        x_pos = max(0, x_pos)
+        y_pos = max(0, y_pos)
+        
+        self.move(x_pos, y_pos)
     
     def init_ui(self):
         """Inicializa la interfaz de usuario."""
@@ -273,115 +241,88 @@ class WallpaperNavigatorWindow(QDialog):
         main_layout.setSpacing(0)
         
         # Contenedor principal con borde redondeado y sombra
-        container = QFrame()
+        container = create_container(
+            border_radius=Constants.UI.BORDER_RADIUS,
+            background=Constants.UI.BACKGROUND_COLOR,
+            shadow={
+                'blur': Constants.UI.SHADOW_BLUR,
+                'color': QColor(*Constants.UI.SHADOW_COLOR),
+                'offset': Constants.UI.SHADOW_OFFSET
+            },
+            zoom_factor=zoom
+        )
         container.setObjectName("container")
-        container.setStyleSheet(f"""
-            #container {{
-                background-color: {Constants.BACKGROUND_COLOR};
-                border-radius: {int(Constants.UI_BORDER_RADIUS * zoom)}px;
-                color: {Constants.TEXT_COLOR};
-            }}
-        """)
-        
-        # Aplicamos efecto de sombra
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(Constants.UI_SHADOW_BLUR * zoom)
-        shadow_color = QColor(*Constants.UI_SHADOW_COLOR)
-        shadow.setColor(shadow_color)
-        shadow.setOffset(0, Constants.UI_SHADOW_OFFSET * zoom)
-        container.setGraphicsEffect(shadow)
         
         container_layout = QVBoxLayout(container)
-        margin = int(Constants.UI_MARGIN * zoom)
+        margin = int(Constants.UI.MARGIN * zoom)
         container_layout.setContentsMargins(margin, margin, margin, margin)
-        container_layout.setSpacing(int(UIConstants.LAYOUT_SPACING * zoom))
+        container_layout.setSpacing(int(6 * zoom))  # Espaciado entre elementos
         
         # Barra superior con título y botones
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(int(UIConstants.HEADER_SPACING * zoom))
+        header_layout.setSpacing(int(4 * zoom))  # Espaciado entre elementos
         
         # Logo de Bing
-        bing_label = QLabel("Microsoft Bing")
-        bing_label.setStyleSheet(f"""
-            font-size: {int(UIConstants.BING_TITLE_FONT_SIZE * zoom)}px;
-            font-weight: bold;
-            color: white;
-        """)
+        bing_label = create_label(
+            "Microsoft Bing",
+            Constants.UI.BING_TITLE_FONT_SIZE,
+            bold=True,
+            color=Constants.UI.TEXT_COLOR,
+            zoom_factor=zoom
+        )
         
         # Botones de la barra superior
         buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(int(UIConstants.HEADER_SPACING * zoom))
+        buttons_layout.setSpacing(int(4 * zoom))  # Espaciado entre elementos
         
-        btn_size = int(Constants.UI_BUTTON_SIZE * zoom)
-        minimize_btn = QPushButton("−")
+        btn_size = int(Constants.UI.BUTTON_SIZE * zoom)
+        
+        # Botón minimizar
+        minimize_btn = create_button(
+            "−",
+            font_size=Constants.UI.BUTTON_FONT_SIZE,
+            color=Constants.UI.TEXT_COLOR,
+            border_radius=Constants.UI.BORDER_RADIUS,
+            zoom_factor=zoom,
+            hover_color=Constants.UI.HOVER_COLOR
+        )
         minimize_btn.setFixedSize(btn_size, btn_size)
-        minimize_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: white;
-                font-weight: bold;
-                border: none;
-                border-radius: {int(Constants.UI_BORDER_RADIUS * zoom)}px;
-                font-size: {int(UIConstants.BUTTON_FONT_SIZE * zoom)}px;
-            }}
-            QPushButton:hover {{
-                background-color: {UIConstants.HOVER_COLOR};
-            }}
-        """)
         minimize_btn.clicked.connect(self.hide)
         
-        share_btn = QPushButton("⤴")
+        # Botón compartir
+        share_btn = create_button(
+            "⤴",
+            font_size=Constants.UI.BUTTON_FONT_SIZE,
+            color=Constants.UI.TEXT_COLOR,
+            border_radius=Constants.UI.BORDER_RADIUS,
+            zoom_factor=zoom,
+            hover_color=Constants.UI.HOVER_COLOR
+        )
         share_btn.setFixedSize(btn_size, btn_size)
-        share_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: white;
-                font-weight: bold;
-                border: none;
-                border-radius: {int(Constants.UI_BORDER_RADIUS * zoom)}px;
-                font-size: {int(UIConstants.BUTTON_FONT_SIZE * zoom)}px;
-            }}
-            QPushButton:hover {{
-                background-color: {UIConstants.HOVER_COLOR};
-            }}
-        """)
         
         # Botón de favorito
-        self.favorite_btn = QPushButton(UIConstants.FAVORITE_ICON_INACTIVE)
+        self.favorite_btn = create_button(
+            Constants.UI.FAVORITE_ICON_INACTIVE,
+            font_size=Constants.UI.BUTTON_FONT_SIZE,
+            color=Constants.UI.TEXT_COLOR,
+            border_radius=Constants.UI.BORDER_RADIUS,
+            zoom_factor=zoom,
+            hover_color=Constants.UI.HOVER_COLOR
+        )
         self.favorite_btn.setFixedSize(btn_size, btn_size)
-        self.favorite_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: white;
-                font-weight: bold;
-                border: none;
-                border-radius: {int(Constants.UI_BORDER_RADIUS * zoom)}px;
-                font-size: {int(UIConstants.BUTTON_FONT_SIZE * zoom)}px;
-            }}
-            QPushButton:hover {{
-                background-color: {UIConstants.HOVER_COLOR};
-                color: {UIConstants.FAVORITE_HOVER_COLOR};
-            }}
-        """)
         self.favorite_btn.clicked.connect(self.toggle_favorite)
         
         # Botón de configuración con menú
-        settings_btn = QPushButton("⚙")
+        settings_btn = create_button(
+            "⚙",
+            font_size=Constants.UI.BUTTON_FONT_SIZE,
+            color=Constants.UI.TEXT_COLOR,
+            border_radius=Constants.UI.BORDER_RADIUS,
+            zoom_factor=zoom,
+            hover_color=Constants.UI.HOVER_COLOR
+        )
         settings_btn.setFixedSize(btn_size, btn_size)
-        settings_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: white;
-                font-weight: bold;
-                border: none;
-                border-radius: {int(Constants.UI_BORDER_RADIUS * zoom)}px;
-                font-size: {int(UIConstants.BUTTON_FONT_SIZE * zoom)}px;
-            }}
-            QPushButton:hover {{
-                background-color: {UIConstants.HOVER_COLOR};
-            }}
-        """)
         settings_btn.clicked.connect(self.show_settings_menu)
         
         buttons_layout.addWidget(minimize_btn)
@@ -395,43 +336,46 @@ class WallpaperNavigatorWindow(QDialog):
         
         # Contenido principal con la imagen y la descripción
         content_layout = QHBoxLayout()
+        content_margin = int(Constants.UI.MARGIN * zoom)
+        content_padding = int(8 * zoom)  # Padding vertical
         content_layout.setContentsMargins(
-            int(UIConstants.CONTENT_MARGIN * zoom), 
-            int(UIConstants.CONTENT_PADDING_V * zoom), 
-            int(UIConstants.CONTENT_MARGIN * zoom), 
-            int(UIConstants.CONTENT_MARGIN * zoom))
-        content_layout.setSpacing(int(UIConstants.CONTENT_SPACING * zoom))
+            content_margin, 
+            content_padding, 
+            content_margin, 
+            content_margin)
+        content_layout.setSpacing(int(12 * zoom))  # Espaciado entre elementos
         
         # Imagen miniatura - Escalada con el factor de zoom
         self.thumbnail_label = QLabel()
-        thumb_width = int(UIConstants.THUMB_WIDTH * zoom)
-        thumb_height = int(UIConstants.THUMB_HEIGHT * zoom)
+        thumb_width = int(Constants.UI.THUMB_WIDTH * zoom)
+        thumb_height = int(Constants.UI.THUMB_HEIGHT * zoom)
         self.thumbnail_label.setFixedSize(thumb_width, thumb_height)
         self.thumbnail_label.setStyleSheet(f"""
-            border-radius: {int(UIConstants.CONTENT_MARGIN * zoom)}px;
-            background-color: {UIConstants.THUMB_BG_COLOR};
+            border-radius: {int(Constants.UI.MARGIN * zoom)}px;
+            background-color: {Constants.UI.THUMB_BG_COLOR};
         """)
         self.thumbnail_label.setAlignment(Qt.AlignCenter)
         
         # Información del wallpaper
         info_layout = QVBoxLayout()
         info_layout.setContentsMargins(0, 0, 0, 0)
-        info_layout.setSpacing(int(UIConstants.HEADER_SPACING * zoom))
+        info_layout.setSpacing(int(4 * zoom))  # Espaciado entre elementos
         
-        self.title_label = QLabel()
+        self.title_label = create_label(
+            "",
+            Constants.UI.NAV_TITLE_FONT_SIZE,
+            bold=True,
+            color=Constants.UI.TEXT_COLOR,
+            zoom_factor=zoom
+        )
         self.title_label.setWordWrap(True)
-        self.title_label.setStyleSheet(f"""
-            font-size: {int(UIConstants.NAV_TITLE_FONT_SIZE * zoom)}px;
-            font-weight: bold;
-            color: white;
-            margin-right: {int(UIConstants.CONTENT_MARGIN * zoom)}px;
-        """)
         
-        self.copyright_label = QLabel()
-        self.copyright_label.setStyleSheet(f"""
-            font-size: {int(UIConstants.NAV_COPYRIGHT_FONT_SIZE * zoom)}px;
-            color: rgba(255, 255, 255, 0.7);
-        """)
+        self.copyright_label = create_label(
+            "",
+            Constants.UI.NAV_COPYRIGHT_FONT_SIZE,
+            color="rgba(255, 255, 255, 0.7)",
+            zoom_factor=zoom
+        )
         
         info_layout.addWidget(self.title_label)
         info_layout.addWidget(self.copyright_label)
@@ -442,48 +386,30 @@ class WallpaperNavigatorWindow(QDialog):
         
         # Barra de navegación
         nav_layout = QHBoxLayout()
-        nav_margin = int(UIConstants.NAV_MARGIN * zoom)
+        nav_margin = int(Constants.UI.MARGIN * zoom)
         nav_layout.setContentsMargins(nav_margin, 0, nav_margin, nav_margin)
         nav_layout.setSpacing(0)
         
-        self.prev_button = QPushButton("⟨ Anterior")
-        self.prev_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: white;
-                border: none;
-                padding: {int(UIConstants.BUTTON_PADDING_V * zoom)}px {int(UIConstants.BUTTON_PADDING_H * zoom)}px;
-                font-size: {int(UIConstants.NAV_BUTTON_FONT_SIZE * zoom)}px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {UIConstants.HOVER_COLOR};
-                border-radius: {int(UIConstants.CONTENT_MARGIN * zoom)}px;
-            }}
-            QPushButton:disabled {{
-                color: {UIConstants.DISABLED_COLOR};
-            }}
-        """)
+        self.prev_button = create_button(
+            "⟨ Anterior",
+            font_size=Constants.UI.NAV_BUTTON_FONT_SIZE,
+            color=Constants.UI.TEXT_COLOR,
+            padding=(4, 8),
+            border_radius=Constants.UI.MARGIN,
+            zoom_factor=zoom,
+            hover_color=Constants.UI.HOVER_COLOR
+        )
         self.prev_button.clicked.connect(self.navigate_to_previous)
         
-        self.next_button = QPushButton("Siguiente ⟩")
-        self.next_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: white;
-                border: none;
-                padding: {int(UIConstants.BUTTON_PADDING_V * zoom)}px {int(UIConstants.BUTTON_PADDING_H * zoom)}px;
-                font-size: {int(UIConstants.NAV_BUTTON_FONT_SIZE * zoom)}px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {UIConstants.HOVER_COLOR};
-                border-radius: {int(UIConstants.CONTENT_MARGIN * zoom)}px;
-            }}
-            QPushButton:disabled {{
-                color: {UIConstants.DISABLED_COLOR};
-            }}
-        """)
+        self.next_button = create_button(
+            "Siguiente ⟩",
+            font_size=Constants.UI.NAV_BUTTON_FONT_SIZE,
+            color=Constants.UI.TEXT_COLOR,
+            padding=(4, 8),
+            border_radius=Constants.UI.MARGIN,
+            zoom_factor=zoom,
+            hover_color=Constants.UI.HOVER_COLOR
+        )
         self.next_button.clicked.connect(self.navigate_to_next)
         
         nav_layout.addWidget(self.prev_button)
@@ -505,19 +431,19 @@ class WallpaperNavigatorWindow(QDialog):
         settings_menu = QMenu(self)
         settings_menu.setStyleSheet(f"""
             QMenu {{
-                background-color: {UIConstants.MENU_BG_COLOR};
+                background-color: {Constants.UI.MENU_BG_COLOR};
                 color: white;
-                border: {UIConstants.MENU_BORDER_WIDTH}px solid {UIConstants.MENU_BORDER_COLOR};
-                border-radius: {int(UIConstants.MENU_BORDER_RADIUS * zoom)}px;
-                padding: {int(UIConstants.MENU_PADDING * zoom)}px;
-                font-size: {int(UIConstants.MENU_FONT_SIZE * zoom)}px;
+                border: {Constants.UI.MENU_BORDER_WIDTH}px solid {Constants.UI.MENU_BORDER_COLOR};
+                border-radius: {int(Constants.UI.MENU_BORDER_RADIUS * zoom)}px;
+                padding: {int(Constants.UI.MENU_PADDING * zoom)}px;
+                font-size: {int(Constants.UI.MENU_FONT_SIZE * zoom)}px;
             }}
             QMenu::item {{
-                padding: {int(UIConstants.MENU_ITEM_PADDING_V * zoom)}px {int(UIConstants.MENU_ITEM_PADDING_H * zoom)}px {int(UIConstants.MENU_ITEM_PADDING_V * zoom)}px {int(UIConstants.MENU_ITEM_PADDING_H * zoom)}px;
-                border-radius: {int(UIConstants.MENU_ITEM_BORDER_RADIUS * zoom)}px;
+                padding: {int(Constants.UI.MENU_ITEM_PADDING_V * zoom)}px {int(Constants.UI.MENU_ITEM_PADDING_H * zoom)}px;
+                border-radius: {int(Constants.UI.MENU_ITEM_BORDER_RADIUS * zoom)}px;
             }}
             QMenu::item:selected {{
-                background-color: {UIConstants.HOVER_COLOR};
+                background-color: {Constants.UI.HOVER_COLOR};
             }}
         """)
         
@@ -551,7 +477,6 @@ class WallpaperNavigatorWindow(QDialog):
         settings_menu.addSeparator()
         
         exit_action = settings_menu.addAction("Salir de la aplicación")
-        from PyQt5.QtWidgets import QApplication
         exit_action.triggered.connect(QApplication.instance().quit)
         
         # Muestra el menú en la posición del cursor
@@ -559,7 +484,6 @@ class WallpaperNavigatorWindow(QDialog):
     
     def open_main_window(self):
         """Abre la ventana principal."""
-        from PyQt5.QtWidgets import QApplication
         QApplication.instance().postEvent(self, QEvent(QEvent.Type.Hide))
         # Luego llamamos a la función que muestra la ventana principal usando QTimer
         # para evitar problemas de temporización con el cierre del menú
@@ -574,49 +498,40 @@ class WallpaperNavigatorWindow(QDialog):
         """Actualiza el estado visual del botón de favorito."""
         is_favorite = self.wallpaper_manager.is_current_favorite() is not None
         
-        # Actualizar el estilo y texto del botón
-        zoom = self.zoom_factor
+        border_radius = int(Constants.UI.BORDER_RADIUS * self.zoom_factor)
+        font_size = int(Constants.UI.BUTTON_FONT_SIZE * self.zoom_factor)
+        
+        stylesheet = (
+            f"QPushButton {{ "
+            f"background-color: transparent; "
+            f"font-weight: bold; "
+            f"border: none; "
+            f"border-radius: {border_radius}px; "
+            f"font-size: {font_size}px; "
+        )
+        
         if is_favorite:
-            self.favorite_btn.setText(UIConstants.FAVORITE_ICON_ACTIVE)
-            self.favorite_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: transparent;
-                    color: {UIConstants.FAVORITE_COLOR};
-                    font-weight: bold;
-                    border: none;
-                    border-radius: {int(Constants.UI_BORDER_RADIUS * zoom)}px;
-                    font-size: {int(UIConstants.BUTTON_FONT_SIZE * zoom)}px;
-                }}
-                QPushButton:hover {{
-                    background-color: {UIConstants.HOVER_COLOR};
-                    color: {UIConstants.FAVORITE_HOVER_COLOR};
-                }}
-            """)
+            self.favorite_btn.setText(Constants.UI.FAVORITE_ICON_ACTIVE)
+            stylesheet += f"color: {Constants.UI.FAVORITE_COLOR}; }}"
         else:
-            self.favorite_btn.setText(UIConstants.FAVORITE_ICON_INACTIVE)
-            self.favorite_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: transparent;
-                    color: white;
-                    font-weight: bold;
-                    border: none;
-                    border-radius: {int(Constants.UI_BORDER_RADIUS * zoom)}px;
-                    font-size: {int(UIConstants.BUTTON_FONT_SIZE * zoom)}px;
-                }}
-                QPushButton:hover {{
-                    background-color: {UIConstants.HOVER_COLOR};
-                    color: {UIConstants.FAVORITE_HOVER_COLOR};
-                }}
-            """)
+            self.favorite_btn.setText(Constants.UI.FAVORITE_ICON_INACTIVE)
+            stylesheet += f"color: white; }}"
+        
+        stylesheet += (
+            f" QPushButton:hover {{ "
+            f"background-color: {Constants.UI.HOVER_COLOR}; "
+            f"color: {Constants.UI.FAVORITE_HOVER_COLOR}; "
+            f"}}"
+        )
+        
+        self.favorite_btn.setStyleSheet(stylesheet)
     
-    
-
     def update_content(self):
         """Actualiza el contenido de la ventana con el wallpaper actual."""
         # Obtenemos la información ACTUALIZADA del wallpaper actual
         current_wallpaper = self.wallpaper_manager.get_current_wallpaper()
         
-        # MEJORA: Manejar correctamente el caso de inicio en frío
+        # Manejar el caso de inicio en frío
         if not current_wallpaper:
             # Verificamos si ya tenemos un contador de intentos
             retry_count = getattr(self, "_retry_count", 0)
@@ -647,7 +562,6 @@ class WallpaperNavigatorWindow(QDialog):
         # Si llegamos aquí, tenemos datos - reseteamos contador
         self._retry_count = 0
         
-        # Resto del método original
         # Aplicar factor de zoom
         zoom = self.zoom_factor
         
@@ -661,13 +575,15 @@ class WallpaperNavigatorWindow(QDialog):
             # Usar el archivo original para los favoritos
             thumb_file = Path(current_wallpaper.get("file_path", ""))
         
-        if thumb_file.exists():
-            pixmap = QPixmap(str(thumb_file))
-            # Usamos una escala óptima para la imagen con el factor de zoom
-            thumb_width = int(UIConstants.THUMB_WIDTH * zoom)
-            thumb_height = int(UIConstants.THUMB_HEIGHT * zoom)
-            self.thumbnail_label.setPixmap(pixmap.scaled(
-                thumb_width, thumb_height, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        if file_exists(thumb_file):
+            pixmap = load_pixmap(
+                thumb_file, 
+                width=Constants.UI.THUMB_WIDTH, 
+                height=Constants.UI.THUMB_HEIGHT, 
+                keep_aspect_ratio=True, 
+                zoom_factor=zoom
+            )
+            self.thumbnail_label.setPixmap(pixmap)
         else:
             # Si no existe la miniatura, intentamos descargarla si tenemos URL
             if self.wallpaper_manager.current_source == "bing" and "thumbnail_url" in current_wallpaper:
@@ -675,22 +591,20 @@ class WallpaperNavigatorWindow(QDialog):
                     self.thumbnail_label.setText("Descargando miniatura...")
                     QApplication.processEvents()  # Forzamos actualización de UI
                     
-                    response = requests.get(current_wallpaper["thumbnail_url"])
-                    response.raise_for_status()
-                    with open(thumb_file, 'wb') as f:
-                        f.write(response.content)
-                    
-                    # Intentamos mostrar la imagen recién descargada
-                    if thumb_file.exists():
-                        pixmap = QPixmap(str(thumb_file))
-                        thumb_width = int(UIConstants.THUMB_WIDTH * zoom)
-                        thumb_height = int(UIConstants.THUMB_HEIGHT * zoom)
-                        self.thumbnail_label.setPixmap(pixmap.scaled(
-                            thumb_width, thumb_height, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                    if download_file(current_wallpaper["thumbnail_url"], thumb_file):
+                        # Intentamos mostrar la imagen recién descargada
+                        pixmap = load_pixmap(
+                            thumb_file, 
+                            width=Constants.UI.THUMB_WIDTH, 
+                            height=Constants.UI.THUMB_HEIGHT, 
+                            keep_aspect_ratio=True, 
+                            zoom_factor=zoom
+                        )
+                        self.thumbnail_label.setPixmap(pixmap)
                     else:
                         self.thumbnail_label.setText("No se pudo cargar la imagen")
                 except Exception as e:
-                    print(f"Error al descargar miniatura: {str(e)}")
+                    log_error(f"Error al descargar miniatura: {str(e)}")
                     self.thumbnail_label.setText("Error al descargar")
             else:
                 self.thumbnail_label.setText("Imagen no disponible")
@@ -700,7 +614,7 @@ class WallpaperNavigatorWindow(QDialog):
             title_parts = current_wallpaper["copyright"].split("(©")
             title = title_parts[0].strip()
             # Limita el título a dos líneas basado en el tamaño y zoom
-            max_length = int(UIConstants.TITLE_CHAR_LIMIT_FACTOR / zoom)  # Menos caracteres si es más grande
+            max_length = int(Constants.UI.TITLE_CHAR_LIMIT_FACTOR / zoom)  # Menos caracteres si es más grande
             if len(title) > max_length:
                 title = title[:max_length-3] + "..."
             
@@ -729,7 +643,6 @@ class WallpaperNavigatorWindow(QDialog):
         wallpaper_count = self.wallpaper_manager.get_wallpaper_count()
         current_idx = self.wallpaper_manager.current_wallpaper_index
         
-        # Lógica revisada para los botones de navegación
         # "Anterior" navega a wallpapers más antiguos (índices mayores)
         can_go_previous = (
             # Hay más wallpapers en la colección actual
@@ -748,6 +661,14 @@ class WallpaperNavigatorWindow(QDialog):
         
         self.prev_button.setEnabled(can_go_previous)
         self.next_button.setEnabled(can_go_next)
+        
+        # Forzar actualización visual
+        self.prev_button.style().unpolish(self.prev_button)
+        self.prev_button.style().polish(self.prev_button)
+        self.next_button.style().unpolish(self.next_button)
+        self.next_button.style().polish(self.next_button)
+        self.prev_button.update()
+        self.next_button.update()
 
     def navigate_to_previous(self):
         """Navega al wallpaper anterior (más antiguo)."""
@@ -761,9 +682,6 @@ class WallpaperNavigatorWindow(QDialog):
         if self.wallpaper_manager.navigate_to_next_wallpaper():
             # Actualizamos el contenido después de la navegación
             self.update_content()    
-    
-    
-    
     
     def mousePressEvent(self, event):
         """Gestiona el evento de pulsación del ratón para mover la ventana."""

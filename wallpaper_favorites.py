@@ -1,13 +1,15 @@
-import os
 import json
-import shutil
-import subprocess
-from pathlib import Path
 from datetime import datetime
 from constants import Constants
+from file_utils import read_json, write_json, copy_file, delete_file, file_exists
+from logger import log_error, log_info
+from resource_utils import open_folder
 
 class WallpaperFavorites:
     """Gestiona los fondos de pantalla favoritos."""
+    
+    # Fuente de wallpapers
+    SOURCE_FAVORITE = "favorite"
     
     @staticmethod
     def get_favorites_file():
@@ -18,26 +20,14 @@ class WallpaperFavorites:
     def load_favorites_data():
         """Carga los datos de favoritos desde el archivo JSON."""
         favorites_file = WallpaperFavorites.get_favorites_file()
-        if favorites_file.exists():
-            try:
-                with open(favorites_file, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"Error al cargar favoritos: {str(e)}")
-        
-        return {"favorites": []}
+        favorites_data = read_json(favorites_file, {"favorites": []})
+        return favorites_data
     
     @staticmethod
     def save_favorites_data(data):
         """Guarda los datos de favoritos en el archivo JSON."""
-        try:
-            favorites_file = WallpaperFavorites.get_favorites_file()
-            with open(favorites_file, 'w') as f:
-                json.dump(data, f, indent=4)
-            return True
-        except Exception as e:
-            print(f"Error al guardar favoritos: {str(e)}")
-            return False
+        favorites_file = WallpaperFavorites.get_favorites_file()
+        return write_json(favorites_file, data)
     
     @staticmethod
     def add_to_favorites(wallpaper_info):
@@ -56,8 +46,8 @@ class WallpaperFavorites:
             idx = wallpaper_info.get("current_index", 0)
             source_file = Constants.get_wallpaper_file(idx)
             
-            if not source_file.exists():
-                print(f"El archivo {source_file} no existe")
+            if not file_exists(source_file):
+                log_error(f"El archivo {source_file} no existe")
                 return False
             
             # Generar un nombre único para el archivo favorito
@@ -66,7 +56,8 @@ class WallpaperFavorites:
             target_path = Constants.get_favorites_path() / favorite_filename
             
             # Copiar el archivo
-            shutil.copy2(source_file, target_path)
+            if not copy_file(source_file, target_path):
+                return False
             
             # Crear registro de favorito con metadatos
             favorite_entry = {
@@ -77,7 +68,7 @@ class WallpaperFavorites:
                 "date": wallpaper_info.get("date", datetime.now().strftime("%Y-%m-%d")),
                 "file_path": str(target_path),
                 "added_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "source": "favorite"  # Marca para identificar que es un favorito
+                "source": WallpaperFavorites.SOURCE_FAVORITE  # Marca para identificar que es un favorito
             }
             
             # Añadir a la lista de favoritos
@@ -85,9 +76,10 @@ class WallpaperFavorites:
             favorites_data["favorites"].append(favorite_entry)
             WallpaperFavorites.save_favorites_data(favorites_data)
             
+            log_info(f"Wallpaper agregado a favoritos: {favorite_entry['copyright']}")
             return True
         except Exception as e:
-            print(f"Error al agregar a favoritos: {str(e)}")
+            log_error(f"Error al agregar a favoritos: {str(e)}")
             return False
     
     @staticmethod
@@ -108,18 +100,19 @@ class WallpaperFavorites:
             for i, favorite in enumerate(favorites_data["favorites"]):
                 if favorite.get("id") == favorite_id:
                     # Eliminar el archivo
-                    file_path = Path(favorite.get("file_path", ""))
-                    if file_path.exists():
-                        file_path.unlink()
+                    file_path = favorite.get("file_path", "")
+                    if file_path and file_exists(file_path):
+                        delete_file(file_path)
                     
                     # Eliminar de la lista
                     favorites_data["favorites"].pop(i)
                     WallpaperFavorites.save_favorites_data(favorites_data)
+                    log_info(f"Wallpaper eliminado de favoritos: {favorite.get('copyright', 'Sin título')}")
                     return True
             
             return False
         except Exception as e:
-            print(f"Error al eliminar de favoritos: {str(e)}")
+            log_error(f"Error al eliminar de favoritos: {str(e)}")
             return False
     
     @staticmethod
@@ -151,7 +144,7 @@ class WallpaperFavorites:
             
             return None
         except Exception as e:
-            print(f"Error al verificar favorito: {str(e)}")
+            log_error(f"Error al verificar favorito: {str(e)}")
             return None
     
     @staticmethod
@@ -166,7 +159,7 @@ class WallpaperFavorites:
             favorites_data = WallpaperFavorites.load_favorites_data()
             return favorites_data["favorites"]
         except Exception as e:
-            print(f"Error al obtener lista de favoritos: {str(e)}")
+            log_error(f"Error al obtener lista de favoritos: {str(e)}")
             return []
     
     @staticmethod
@@ -179,20 +172,7 @@ class WallpaperFavorites:
         """
         try:
             fav_dir = Constants.get_favorites_path()
-            
-            # En Windows
-            if os.name == 'nt':
-                os.startfile(fav_dir)
-            # En MacOS
-            elif os.name == 'posix' and hasattr(os, 'uname') and os.uname().sysname == 'Darwin':
-                subprocess.call(['open', fav_dir])
-            # En Linux
-            elif os.name == 'posix':
-                subprocess.call(['xdg-open', fav_dir])
-            else:
-                return False
-                
-            return True
+            return open_folder(fav_dir)
         except Exception as e:
-            print(f"Error al abrir carpeta de favoritos: {str(e)}")
+            log_error(f"Error al abrir carpeta de favoritos: {str(e)}")
             return False

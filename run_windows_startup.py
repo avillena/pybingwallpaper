@@ -2,6 +2,7 @@ import os
 import sys
 import winreg
 from constants import Constants
+from logger import log_error
 
 class StartupManager:
     """Gestiona la configuración de inicio con Windows."""
@@ -13,7 +14,7 @@ class StartupManager:
             # Abre la clave del registro
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
-                Constants.REGISTRY_RUN_PATH,
+                Constants.Windows.REGISTRY_RUN_PATH,
                 0, winreg.KEY_READ
             )
             
@@ -29,7 +30,8 @@ class StartupManager:
                 winreg.CloseKey(key)
                 return False
                 
-        except Exception:
+        except Exception as e:
+            log_error(f"Error al verificar inicio automático: {str(e)}")
             return False
     
     @staticmethod
@@ -39,7 +41,7 @@ class StartupManager:
             # Abre la clave del registro con permisos de escritura
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
-                Constants.REGISTRY_RUN_PATH,
+                Constants.Windows.REGISTRY_RUN_PATH,
                 0, winreg.KEY_WRITE
             )
             
@@ -59,5 +61,5 @@ class StartupManager:
             winreg.CloseKey(key)
             return True
         except Exception as e:
-            print(f"Error al configurar el inicio automático: {str(e)}")
+            log_error(f"Error al configurar el inicio automático: {str(e)}")
             return False
