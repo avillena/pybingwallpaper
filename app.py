@@ -3,13 +3,13 @@ import sys
 import psutil
 from pathlib import Path
 from PIL import Image, ImageDraw
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
 
 from constants import Constants
 from bing_wallpaper_service import WallpaperManager
-from ui import MainWindow, WallpaperNavigatorWindow
+from ui import WallpaperNavigatorWindow
 from run_windows_startup import StartupManager
 from logger import log_info, log_error
 from file_utils import file_exists, write_json, delete_file
@@ -22,7 +22,6 @@ class BingWallpaperApp:
         self.app.setQuitOnLastWindowClosed(False)  # Permite ejecutar en segundo plano
         
         self.wallpaper_manager = WallpaperManager()
-        self.main_window = None
         self.navigator_window = None
         self.tray_icon = None
         
@@ -39,34 +38,15 @@ class BingWallpaperApp:
                 self.send_show_message()
             sys.exit(0)
         
-        # Agrega método para acceso a la ventana principal
-        self.app.access_app_window = self.show_main_window
-        
         # Registra un callback para recrear las ventanas cuando cambie el zoom
         self.wallpaper_manager.zoom_changed.connect(self.handle_zoom_change)
     
     def handle_zoom_change(self, new_zoom_factor):
         """Maneja el cambio en el factor de zoom."""
-        # Si las ventanas existen, las recreamos con el nuevo zoom
+        # Si la ventana existe, la recreamos con el nuevo zoom
         if hasattr(self, 'navigator_window') and self.navigator_window:
             # La ventana de navegación se actualiza automáticamente a través de su propio callback
             pass
-            
-        if hasattr(self, 'main_window') and self.main_window:
-            # Guardamos el estado de visibilidad de la ventana principal
-            was_visible = self.main_window.isVisible()
-            
-            # Cerramos la ventana actual
-            self.main_window.close()
-            
-            # Creamos una nueva ventana con el zoom actualizado
-            self.main_window = MainWindow(self.wallpaper_manager)
-            
-            # Restauramos la visibilidad
-            if was_visible:
-                self.main_window.show()
-                self.main_window.raise_()
-                self.main_window.activateWindow()
     
     def setup_app_icon(self):
         """Configura el icono de la aplicación."""
@@ -212,15 +192,6 @@ class BingWallpaperApp:
         QApplication.instance().processEvents()
         QTimer.singleShot(Constants.Network.SIGNAL_CHECK_INTERVAL, self.check_show_signals)
     
-    def show_main_window(self):
-        """Muestra la ventana principal."""
-        if not self.main_window:
-            self.main_window = MainWindow(self.wallpaper_manager)
-        
-        self.main_window.show()
-        self.main_window.raise_()
-        self.main_window.activateWindow()
-    
     def show_navigator_window(self):
         """Muestra la ventana de navegación de wallpapers."""
         if not self.navigator_window:
@@ -239,9 +210,6 @@ class BingWallpaperApp:
         
         # Configura el icono de la bandeja del sistema
         self.setup_tray_icon()
-        
-        # Crea la ventana principal pero no la muestra automáticamente
-        self.main_window = MainWindow(self.wallpaper_manager)
         
         # Crea la ventana de navegación
         self.navigator_window = WallpaperNavigatorWindow(self.wallpaper_manager)

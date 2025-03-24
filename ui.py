@@ -1,7 +1,7 @@
 import requests
 from PyQt5.QtCore import Qt, QSize, QTimer, QEvent
 from PyQt5.QtGui import QCursor, QPalette, QColor
-from PyQt5.QtWidgets import (QMainWindow, QLabel, QCheckBox, 
+from PyQt5.QtWidgets import (QLabel, QCheckBox, 
                              QVBoxLayout, QHBoxLayout, QWidget, QMenu, 
                              QAction, QDialog, QFrame, QMessageBox,
                              QApplication)
@@ -14,145 +14,7 @@ from logger import log_error, log_info
 from resource_utils import open_url, open_folder
 from ui_components import create_label, create_button, create_container, load_pixmap
 from file_utils import file_exists
-
-class MainWindow(QMainWindow):
-    """Ventana principal de la aplicación."""
-    
-    def __init__(self, wallpaper_manager):
-        super().__init__()
-        
-        self.wallpaper_manager = wallpaper_manager
-        self.zoom_factor = self.wallpaper_manager.get_zoom_factor()
-        
-        # Conectar señal de descarga completada
-        self.wallpaper_manager.download_completed.connect(self.update_state)
-        
-        self.init_ui()
-        self.update_state(self.wallpaper_manager.state)
-    
-    def init_ui(self):
-        """Inicializa la interfaz de usuario."""
-        self.setWindowTitle(Constants.APP_NAME)
-        self.setFixedSize(Constants.UI.MAIN_WIDTH, Constants.UI.MAIN_HEIGHT)
-        
-        # Widget principal y layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(Constants.UI.MARGIN * 2, 
-                                      Constants.UI.MARGIN * 2, 
-                                      Constants.UI.MARGIN * 2, 
-                                      Constants.UI.MARGIN * 2)
-        
-        # Título y versión
-        title_label = create_label(
-            Constants.APP_NAME, 
-            Constants.UI.TITLE_FONT_SIZE, 
-            bold=True, 
-            zoom_factor=self.zoom_factor
-        )
-        
-        version_label = create_label(
-            f"Version {Constants.APP_VERSION}", 
-            Constants.UI.VERSION_FONT_SIZE, 
-            zoom_factor=self.zoom_factor
-        )
-        
-        # Copyright y enlace
-        self.copyright_label = create_label(
-            Constants.APP_COPYRIGHT, 
-            Constants.UI.COPYRIGHT_FONT_SIZE, 
-            color=Constants.UI.LINK_COLOR, 
-            zoom_factor=self.zoom_factor
-        )
-        self.copyright_label.setOpenExternalLinks(True)
-        self.copyright_label.setCursor(Qt.PointingHandCursor)
-        self.copyright_label.mousePressEvent = self.open_website
-        
-        # Checkbox para iniciar con Windows
-        self.startup_checkbox = QCheckBox(f"Iniciar {Constants.APP_NAME} con Windows")
-        self.startup_checkbox.setChecked(StartupManager.get_run_on_startup())
-        self.startup_checkbox.stateChanged.connect(self.toggle_startup)
-        
-        # Información de la imagen actual
-        self.image_title_label = create_label(
-            "Cargando información de la imagen...", 
-            Constants.UI.COPYRIGHT_FONT_SIZE, 
-            color=Constants.UI.LINK_COLOR, 
-            zoom_factor=self.zoom_factor
-        )
-        self.image_title_label.setCursor(Qt.PointingHandCursor)
-        self.image_title_label.mousePressEvent = self.open_image_link
-        
-        # Estado de la aplicación
-        self.status_label = create_label(
-            f"{Constants.APP_NAME} está en funcionamiento.", 
-            Constants.UI.COPYRIGHT_FONT_SIZE, 
-            zoom_factor=self.zoom_factor
-        )
-        
-        # Botón de salir
-        exit_button = create_button(
-            f"Salir de {Constants.APP_NAME}", 
-            font_size=Constants.UI.BUTTON_FONT_SIZE, 
-            background=Constants.UI.HIGHLIGHT_COLOR, 
-            color=Constants.UI.TEXT_COLOR,
-            padding=(4, 8), 
-            border_radius=Constants.UI.BORDER_RADIUS, 
-            zoom_factor=self.zoom_factor, 
-            hover_color=Constants.UI.HOVER_COLOR
-        )
-        exit_button.clicked.connect(self.exit_app)
-        
-        # Añadir widgets al layout
-        main_layout.addWidget(title_label)
-        main_layout.addWidget(version_label)
-        main_layout.addWidget(self.copyright_label)
-        main_layout.addStretch(1)
-        main_layout.addWidget(self.startup_checkbox)
-        main_layout.addStretch(1)
-        main_layout.addWidget(self.image_title_label)
-        main_layout.addWidget(self.status_label)
-        
-        # Layout para botón inferior
-        button_layout = QHBoxLayout()
-        button_layout.addStretch(1)
-        button_layout.addWidget(exit_button)
-        main_layout.addLayout(button_layout)
-    
-    def update_state(self, state):
-        """Actualiza la interfaz con el estado actual."""
-        if not state["copyright"]:
-            self.image_title_label.setText("Esperando información de la imagen...")
-        else:
-            self.image_title_label.setText(state["copyright"])
-            # Guarda la URL para cuando el usuario haga clic
-            self.image_title_label.setProperty("url", state["picture_url"])
-    
-    def toggle_startup(self, state):
-        """Cambia la configuración de inicio con Windows."""
-        StartupManager.set_run_on_startup(state == Qt.Checked)
-    
-    def open_website(self, event):
-        """Abre el sitio web del proyecto."""
-        open_url(Constants.get_bing_website_url())
-    
-    def open_image_link(self, event):
-        """Abre la URL de la imagen actual."""
-        url = self.image_title_label.property("url")
-        if url:
-            open_url(url)
-    
-    def closeEvent(self, event):
-        """Maneja el evento de cierre de la ventana."""
-        # Oculta la ventana en lugar de cerrar la aplicación
-        self.hide()
-        event.ignore()
-    
-    def exit_app(self):
-        """Cierra la aplicación completamente."""
-        QApplication.instance().quit()
-
+from http_client import download_file
 
 class WallpaperNavigatorWindow(QDialog):
     """Ventana para navegar por los fondos de pantalla."""
@@ -265,7 +127,7 @@ class WallpaperNavigatorWindow(QDialog):
         
         # Logo de Bing
         bing_label = create_label(
-            "Microsoft Bing",
+            Constants.UI.MAIN_WINDOW_TITLE,
             Constants.UI.BING_TITLE_FONT_SIZE,
             bold=True,
             color=Constants.UI.TEXT_COLOR,
@@ -481,13 +343,6 @@ class WallpaperNavigatorWindow(QDialog):
         
         # Muestra el menú en la posición del cursor
         settings_menu.exec_(QCursor.pos())
-    
-    def open_main_window(self):
-        """Abre la ventana principal."""
-        QApplication.instance().postEvent(self, QEvent(QEvent.Type.Hide))
-        # Luego llamamos a la función que muestra la ventana principal usando QTimer
-        # para evitar problemas de temporización con el cierre del menú
-        QTimer.singleShot(100, lambda: QApplication.instance().access_app_window())
     
     def toggle_favorite(self):
         """Alterna el estado de favorito del wallpaper actual."""

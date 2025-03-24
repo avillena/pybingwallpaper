@@ -82,6 +82,9 @@ class Constants:
         
         # Límite de caracteres para título
         TITLE_CHAR_LIMIT_FACTOR = 70
+
+
+        MAIN_WINDOW_TITLE = "Python Bing Wallpaper Client"
     
     # Constantes de red
     class Network:
