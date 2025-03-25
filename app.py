@@ -8,11 +8,11 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
 
 from constants import Constants
-from bing_wallpaper_service import WallpaperManager
+from core.bing_wallpaper_service import WallpaperManager
 from ui import WallpaperNavigatorWindow
-from run_windows_startup import StartupManager
-from logger import log_info, log_error
-from file_utils import file_exists, write_json, delete_file
+from platform.windows.startup import StartupManager
+from utils.logger import log_info, log_error
+from utils.file_utils import file_exists, write_json, delete_file
 
 class BingWallpaperApp:
     """Clase principal de la aplicación."""

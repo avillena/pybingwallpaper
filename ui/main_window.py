@@ -7,14 +7,14 @@ from PyQt5.QtWidgets import (QLabel, QCheckBox,
                              QApplication)
 
 from constants import Constants
-from run_windows_startup import StartupManager
-from wallpaper_favorites import WallpaperFavorites
+from platform.windows.startup import StartupManager
+from core.wallpaper_favorites import WallpaperFavorites
 from pathlib import Path
-from logger import log_error, log_info
-from resource_utils import open_url, open_folder
-from ui_components import create_label, create_button, create_container, load_pixmap
-from file_utils import file_exists
-from http_client import download_file
+from utils.logger import log_error, log_info
+from utils.resource_utils import open_url, open_folder
+from ui.components import create_label, create_button, create_container, load_pixmap
+from utils.file_utils import file_exists
+from utils.http_client import download_file
 
 class WallpaperNavigatorWindow(QDialog):
     """Ventana para navegar por los fondos de pantalla."""

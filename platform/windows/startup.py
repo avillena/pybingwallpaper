@@ -2,7 +2,7 @@ import os
 import sys
 import winreg
 from constants import Constants
-from logger import log_error
+from utils.logger import log_error
 
 class StartupManager:
     """Gestiona la configuración de inicio con Windows."""

@@ -1,8 +1,8 @@
 from PyQt5.QtCore import QObject, pyqtSignal
 from constants import Constants
-from logger import log_error, log_info
-from http_client import download_file
-from file_utils import file_exists
+from utils.logger import log_error, log_info
+from utils.http_client import download_file
+from utils.file_utils import file_exists
 from pathlib import Path
 
 class NavigationController(QObject):

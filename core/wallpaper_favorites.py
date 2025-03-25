@@ -1,9 +1,9 @@
 import json
 from datetime import datetime
 from constants import Constants
-from file_utils import read_json, write_json, copy_file, delete_file, file_exists
-from logger import log_error, log_info
-from resource_utils import open_folder
+from utils.file_utils import read_json, write_json, copy_file, delete_file, file_exists
+from utils.logger import log_error, log_info
+from utils.resource_utils import open_folder
 
 class WallpaperFavorites:
     """Gestiona los fondos de pantalla favoritos."""

@@ -1,7 +1,7 @@
 # http_client.py
 import requests
 from pathlib import Path
-from logger import log_error
+from utils.logger import log_error
 
 def download_file(url, destination_path, chunk_size=8192):
     """

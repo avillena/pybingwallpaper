@@ -9,11 +9,11 @@ import xml.etree.ElementTree as ET
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from constants import Constants
-from wallpaper_favorites import WallpaperFavorites
-from logger import log_error, log_info
-from file_utils import read_json, write_json, file_exists
-from http_client import download_file, download_content, download_binary
-from navigation_controller import NavigationController
+from core.wallpaper_favorites import WallpaperFavorites
+from utils.logger import log_error, log_info
+from utils.file_utils import read_json, write_json, file_exists
+from utils.http_client import download_file, download_content, download_binary
+from core.navigation_controller import NavigationController
 
 class WallpaperManager(QObject):
     """Gestiona la descarga y actualización del fondo de pantalla."""

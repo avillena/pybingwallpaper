@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from logger import log_error, log_info
+from utils.logger import log_error, log_info
 
 def ensure_directory(directory_path):
     """Asegura que un directorio exista, creándolo si es necesario."""

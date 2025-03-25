@@ -3,7 +3,7 @@ import os
 import subprocess
 import platform
 from pathlib import Path
-from logger import log_error
+from utils.logger import log_error
 
 def open_url(url):
     """
