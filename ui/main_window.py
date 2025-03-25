@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QLabel, QCheckBox,
                              QApplication)
 
 from constants import Constants
-from platform.windows.startup import StartupManager
+from sys_platform.windows.startup import StartupManager
 from core.wallpaper_favorites import WallpaperFavorites
 from pathlib import Path
 from utils.logger import log_error, log_info
@@ -162,6 +162,7 @@ class WallpaperNavigatorWindow(QDialog):
             hover_color=Constants.UI.HOVER_COLOR
         )
         share_btn.setFixedSize(btn_size, btn_size)
+        share_btn.clicked.connect(self.open_wallpaper_url)  # Añade esta línea
         
         # Botón de favorito
         self.favorite_btn = create_button(
@@ -570,3 +571,27 @@ class WallpaperNavigatorWindow(QDialog):
     def focusOutEvent(self, event):
         self.hide()
         super().focusOutEvent(event)
+
+
+    def open_wallpaper_url(self):
+        """Abre la URL directa del wallpaper actual en el navegador."""
+        try:
+            current_wallpaper = self.wallpaper_manager.get_current_wallpaper()
+            log_info("Botón compartir presionado")
+            
+            if not current_wallpaper or "picture_url" not in current_wallpaper:
+                log_info("No hay URL de imagen disponible")
+                return
+                
+            # Obtiene la URL directa de la imagen
+            image_url = current_wallpaper["picture_url"]
+            log_info(f"Abriendo URL de imagen: {image_url}")
+            
+            # Usa la función de utils/resource_utils.py
+            from utils.resource_utils import open_url
+            success = open_url(image_url)
+            
+            if not success:
+                log_error("Fallo al abrir URL")
+        except Exception as e:
+            log_error(f"Error al abrir URL: {str(e)}")

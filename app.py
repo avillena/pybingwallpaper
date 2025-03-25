@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
 from constants import Constants
 from core.bing_wallpaper_service import WallpaperManager
 from ui import WallpaperNavigatorWindow
-from platform.windows.startup import StartupManager
+from sys_platform.windows.startup import StartupManager
 from utils.logger import log_info, log_error
 from utils.file_utils import file_exists, write_json, delete_file
 
