@@ -4,8 +4,7 @@ from PyQt5.QtGui import QCursor, QPalette, QColor
 from PyQt5.QtWidgets import (QLabel, QCheckBox, 
                              QVBoxLayout, QHBoxLayout, QWidget, QMenu, 
                              QAction, QDialog, QFrame, QMessageBox,
-                             QApplication)
-
+                             QApplication, QSizePolicy)
 from constants import Constants
 from sys_platform.windows.startup import StartupManager
 from core.wallpaper_favorites import WallpaperFavorites
@@ -97,6 +96,7 @@ class WallpaperNavigatorWindow(QDialog):
         """Inicializa la interfaz de usuario."""
         # Factor de zoom para escalar elementos
         zoom = self.zoom_factor
+        golden_ratio = 1.618
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -162,7 +162,7 @@ class WallpaperNavigatorWindow(QDialog):
             hover_color=Constants.UI.HOVER_COLOR
         )
         share_btn.setFixedSize(btn_size, btn_size)
-        share_btn.clicked.connect(self.open_wallpaper_url)  # Añade esta línea
+        share_btn.clicked.connect(self.open_wallpaper_url)
         
         # Botón de favorito
         self.favorite_btn = create_button(
@@ -208,7 +208,10 @@ class WallpaperNavigatorWindow(QDialog):
             content_margin)
         content_layout.setSpacing(int(12 * zoom))  # Espaciado entre elementos
         
-        # Imagen miniatura - Escalada con el factor de zoom
+        # Ajuste de proporción áurea (38% / 62%)
+        golden_width_factor = 1 / (1 + golden_ratio)  # Aproximadamente 0.38
+        
+        # Imagen miniatura - Escalada con el factor de zoom y proporción áurea
         self.thumbnail_label = QLabel()
         thumb_width = int(Constants.UI.THUMB_WIDTH * zoom)
         thumb_height = int(Constants.UI.THUMB_HEIGHT * zoom)
@@ -222,8 +225,9 @@ class WallpaperNavigatorWindow(QDialog):
         # Información del wallpaper
         info_layout = QVBoxLayout()
         info_layout.setContentsMargins(0, 0, 0, 0)
-        info_layout.setSpacing(int(4 * zoom))  # Espaciado entre elementos
+        info_layout.setSpacing(int(8 * zoom))  # Aumentado para más espacio entre elementos
         
+        # Título/descripción con espacio maximizado
         self.title_label = create_label(
             "",
             Constants.UI.NAV_TITLE_FONT_SIZE,
@@ -232,20 +236,29 @@ class WallpaperNavigatorWindow(QDialog):
             zoom_factor=zoom
         )
         self.title_label.setWordWrap(True)
+        self.title_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.title_label.setMinimumHeight(int(thumb_height * 0.618))  # Proporción áurea
         
+        # Espaciador flexible
+        flexible_spacer = QWidget()
+        flexible_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # Copyright en la parte inferior
         self.copyright_label = create_label(
             "",
             Constants.UI.NAV_COPYRIGHT_FONT_SIZE,
             color="rgba(255, 255, 255, 0.7)",
             zoom_factor=zoom
         )
+        self.copyright_label.setAlignment(Qt.AlignBottom | Qt.AlignLeft)
         
         info_layout.addWidget(self.title_label)
+        info_layout.addWidget(flexible_spacer)
         info_layout.addWidget(self.copyright_label)
-        info_layout.addStretch(1)
         
-        content_layout.addWidget(self.thumbnail_label)
-        content_layout.addLayout(info_layout, 1)
+        # Establecer proporciones según regla áurea
+        content_layout.addWidget(self.thumbnail_label, int(golden_width_factor * 100))
+        content_layout.addLayout(info_layout, int((1 - golden_width_factor) * 100))
         
         # Barra de navegación
         nav_layout = QHBoxLayout()
@@ -469,11 +482,13 @@ class WallpaperNavigatorWindow(QDialog):
         if "copyright" in current_wallpaper:
             title_parts = current_wallpaper["copyright"].split("(©")
             title = title_parts[0].strip()
-            # Limita el título a dos líneas basado en el tamaño y zoom
-            max_length = int(Constants.UI.TITLE_CHAR_LIMIT_FACTOR / zoom)  # Menos caracteres si es más grande
-            if len(title) > max_length:
-                title = title[:max_length-3] + "..."
             
+            # QUITAR ESTA PARTE - No truncar el título ya que usamos wordwrap
+            # max_length = int(Constants.UI.TITLE_CHAR_LIMIT_FACTOR / zoom)
+            # if len(title) > max_length:
+            #    title = title[:max_length-3] + "..."
+            
+            # Simplemente usamos el título completo
             copyright_text = "©" + title_parts[1] if len(title_parts) > 1 else ""
             
             self.title_label.setText(title)
