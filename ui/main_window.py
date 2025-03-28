@@ -1,11 +1,11 @@
 import requests
-from PyQt5.QtCore import Qt, QSize, QTimer, QEvent
+from PyQt5.QtCore import Qt, QSize, QTimer, QEvent, QLocale, QTranslator
 from PyQt5.QtGui import QCursor, QPalette, QColor
 from PyQt5.QtWidgets import (QLabel, QCheckBox, 
                              QVBoxLayout, QHBoxLayout, QWidget, QMenu, 
                              QAction, QDialog, QFrame, QMessageBox,
                              QApplication, QSizePolicy)
-from constants import Constants
+from constants import Constants, tr
 from sys_platform.windows.startup import StartupManager
 from core.wallpaper_favorites import WallpaperFavorites
 from pathlib import Path
@@ -18,10 +18,13 @@ from utils.http_client import download_file
 class WallpaperNavigatorWindow(QDialog):
     """Ventana para navegar por los fondos de pantalla."""
     
-    def __init__(self, wallpaper_manager):
+    def __init__(self, wallpaper_manager, app_instance):
         super().__init__()
         self.wallpaper_manager = wallpaper_manager
-        self.setWindowTitle("Bing Wallpaper")
+        # Guardamos referencia a la instancia de la aplicación para acceder a sus métodos
+        self.app_instance = app_instance
+        
+        self.setWindowTitle(tr("Bing Wallpaper"))
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Popup)
         self.setAttribute(Qt.WA_TranslucentBackground)
         
@@ -142,7 +145,7 @@ class WallpaperNavigatorWindow(QDialog):
         
         # Botón minimizar
         minimize_btn = create_button(
-            "−",
+            Constants.UI.MINIMIZE_BUTTON,
             font_size=Constants.UI.BUTTON_FONT_SIZE,
             color=Constants.UI.TEXT_COLOR,
             border_radius=Constants.UI.BORDER_RADIUS,
@@ -154,7 +157,7 @@ class WallpaperNavigatorWindow(QDialog):
         
         # Botón compartir
         share_btn = create_button(
-            "⤴",
+            Constants.UI.SHARE_BUTTON,
             font_size=Constants.UI.BUTTON_FONT_SIZE,
             color=Constants.UI.TEXT_COLOR,
             border_radius=Constants.UI.BORDER_RADIUS,
@@ -178,7 +181,7 @@ class WallpaperNavigatorWindow(QDialog):
         
         # Botón de configuración con menú
         settings_btn = create_button(
-            "⚙",
+            Constants.UI.SETTINGS_BUTTON,
             font_size=Constants.UI.BUTTON_FONT_SIZE,
             color=Constants.UI.TEXT_COLOR,
             border_radius=Constants.UI.BORDER_RADIUS,
@@ -267,7 +270,7 @@ class WallpaperNavigatorWindow(QDialog):
         nav_layout.setSpacing(0)
         
         self.prev_button = create_button(
-            "⟨ Anterior",
+            Constants.UI.PREVIOUS_BUTTON,
             font_size=Constants.UI.NAV_BUTTON_FONT_SIZE,
             color=Constants.UI.TEXT_COLOR,
             padding=(4, 8),
@@ -278,7 +281,7 @@ class WallpaperNavigatorWindow(QDialog):
         self.prev_button.clicked.connect(self.navigate_to_previous)
         
         self.next_button = create_button(
-            "Siguiente ⟩",
+            Constants.UI.NEXT_BUTTON,
             font_size=Constants.UI.NAV_BUTTON_FONT_SIZE,
             color=Constants.UI.TEXT_COLOR,
             padding=(4, 8),
@@ -324,13 +327,13 @@ class WallpaperNavigatorWindow(QDialog):
         """)
         
         # Opciones del menú
-        run_startup_action = settings_menu.addAction("Iniciar con Windows")
+        run_startup_action = settings_menu.addAction(Constants.UI.STARTUP_MENU_ITEM)
         run_startup_action.setCheckable(True)
         run_startup_action.setChecked(StartupManager.get_run_on_startup())
         run_startup_action.triggered.connect(lambda checked: StartupManager.set_run_on_startup(checked))
         
         # Opción para ajustar zoom
-        zoom_menu = settings_menu.addMenu("Ajustar tamaño")
+        zoom_menu = settings_menu.addMenu(Constants.UI.SIZE_MENU_TITLE)
         
         for name, factor in Constants.ZOOM_OPTIONS:
             zoom_action = zoom_menu.addAction(name)
@@ -344,19 +347,75 @@ class WallpaperNavigatorWindow(QDialog):
             
             zoom_action.triggered.connect(apply_zoom)
         
+        # Menú de selección de idioma
+        language_menu = settings_menu.addMenu(tr("Idioma"))
+        
+        # Obtener el idioma actual de la aplicación (no del sistema)
+        current_language = self.app_instance.get_current_language()
+        
+        # Acciones para cada idioma
+        spanish_action = language_menu.addAction(tr("Español"))
+        spanish_action.setCheckable(True)
+        spanish_action.setChecked(current_language == "es")
+        spanish_action.triggered.connect(lambda checked: self.change_language("es") if checked else None)
+        
+        english_action = language_menu.addAction(tr("Inglés"))
+        english_action.setCheckable(True)
+        english_action.setChecked(current_language == "en")
+        english_action.triggered.connect(lambda checked: self.change_language("en") if checked else None)
+        
+        # Opción para usar el idioma del sistema
+        system_action = language_menu.addAction(tr("Usar idioma del sistema"))
+        system_action.triggered.connect(self.reset_to_system_language)
+        
         settings_menu.addSeparator()
         
         # Opción para abrir la carpeta de favoritos
-        favorites_action = settings_menu.addAction("Abrir carpeta de favoritos")
+        favorites_action = settings_menu.addAction(Constants.UI.OPEN_FAVORITES_MENU_ITEM)
         favorites_action.triggered.connect(WallpaperFavorites.open_favorites_folder)
         
         settings_menu.addSeparator()
         
-        exit_action = settings_menu.addAction("Salir de la aplicación")
+        exit_action = settings_menu.addAction(Constants.UI.EXIT_MENU_ITEM)
         exit_action.triggered.connect(QApplication.instance().quit)
         
         # Muestra el menú en la posición del cursor
         settings_menu.exec_(QCursor.pos())
+    
+    def change_language(self, language_code):
+        """Cambia el idioma de la aplicación."""
+        app = QApplication.instance()
+        
+        # Guardar preferencia de idioma
+        from utils.file_utils import write_json
+        lang_settings = {"language": language_code}
+        lang_file = Constants.get_data_path() / "language.json"
+        write_json(lang_file, lang_settings)
+        
+        # Mostrar mensaje informativo
+        QMessageBox.information(
+            self,
+            tr("Cambio de idioma"),
+            tr("El cambio de idioma se aplicará al reiniciar la aplicación."),
+            QMessageBox.Ok
+        )
+        
+        # Opcionalmente, reiniciar la aplicación automáticamente
+        # app.quit()
+        # QProcess.startDetached(sys.executable, sys.argv)
+    
+    def reset_to_system_language(self):
+        """Reinicia la preferencia de idioma al del sistema."""
+        from utils.file_utils import delete_file
+        lang_file = Constants.get_data_path() / "language.json"
+        delete_file(lang_file)
+        
+        QMessageBox.information(
+            self,
+            tr("Idioma del sistema"),
+            tr("Se usará el idioma del sistema al reiniciar la aplicación."),
+            QMessageBox.Ok
+        )
     
     def toggle_favorite(self):
         """Alterna el estado de favorito del wallpaper actual."""
@@ -407,19 +466,19 @@ class WallpaperNavigatorWindow(QDialog):
             
             if retry_count > 10:  # Máximo 10 intentos (10 segundos)
                 # Después de varios intentos, mostramos mensaje más claro
-                self.title_label.setText("No se pudo cargar el wallpaper")
-                self.copyright_label.setText("Intente más tarde o reinicie la aplicación")
+                self.title_label.setText(Constants.UI.ERROR_LOAD_WALLPAPER)
+                self.copyright_label.setText(Constants.UI.ERROR_TRY_LATER)
                 # Reseteamos contador para futuros intentos
                 self._retry_count = 0
                 return
             
             # Mostramos mensaje de carga con contador
-            self.title_label.setText(f"Descargando imagen de Bing... ({retry_count+1})")
-            self.copyright_label.setText("Por favor espere mientras se obtienen los datos iniciales")
+            self.title_label.setText(f"{Constants.UI.DOWNLOADING_IMAGE} ({retry_count+1})")
+            self.copyright_label.setText(Constants.UI.WAIT_MESSAGE)
             
             # Limpiamos miniatura anterior si existe
             self.thumbnail_label.clear()
-            self.thumbnail_label.setText("Cargando...")
+            self.thumbnail_label.setText(Constants.UI.LOADING_TEXT)
             
             # Incrementamos contador para siguiente intento
             self._retry_count = retry_count + 1
@@ -457,7 +516,7 @@ class WallpaperNavigatorWindow(QDialog):
             # Si no existe la miniatura, intentamos descargarla si tenemos URL
             if self.wallpaper_manager.current_source == "bing" and "thumbnail_url" in current_wallpaper:
                 try:
-                    self.thumbnail_label.setText("Descargando miniatura...")
+                    self.thumbnail_label.setText(Constants.UI.DOWNLOADING_THUMBNAIL)
                     QApplication.processEvents()  # Forzamos actualización de UI
                     
                     if download_file(current_wallpaper["thumbnail_url"], thumb_file):
@@ -471,12 +530,12 @@ class WallpaperNavigatorWindow(QDialog):
                         )
                         self.thumbnail_label.setPixmap(pixmap)
                     else:
-                        self.thumbnail_label.setText("No se pudo cargar la imagen")
+                        self.thumbnail_label.setText(Constants.UI.LOAD_ERROR)
                 except Exception as e:
                     log_error(f"Error al descargar miniatura: {str(e)}")
-                    self.thumbnail_label.setText("Error al descargar")
+                    self.thumbnail_label.setText(Constants.UI.DOWNLOAD_ERROR)
             else:
-                self.thumbnail_label.setText("Imagen no disponible")
+                self.thumbnail_label.setText(Constants.UI.IMAGE_NOT_AVAILABLE)
         
         # Parsea y formatea mejor el título y copyright
         if "copyright" in current_wallpaper:
@@ -494,7 +553,7 @@ class WallpaperNavigatorWindow(QDialog):
             self.title_label.setText(title)
             self.copyright_label.setText(copyright_text)
         else:
-            self.title_label.setText("Sin título disponible")
+            self.title_label.setText(Constants.UI.UNTITLED)
             self.copyright_label.setText("")
         
         # Muestra la fuente actual en la interfaz
@@ -587,26 +646,25 @@ class WallpaperNavigatorWindow(QDialog):
         self.hide()
         super().focusOutEvent(event)
 
-
     def open_wallpaper_url(self):
         """Abre la URL directa del wallpaper actual en el navegador."""
         try:
             current_wallpaper = self.wallpaper_manager.get_current_wallpaper()
-            log_info("Botón compartir presionado")
+            log_info(tr("Botón compartir presionado"))
             
             if not current_wallpaper or "picture_url" not in current_wallpaper:
-                log_info("No hay URL de imagen disponible")
+                log_info(tr("No hay URL de imagen disponible"))
                 return
                 
             # Obtiene la URL directa de la imagen
             image_url = current_wallpaper["picture_url"]
-            log_info(f"Abriendo URL de imagen: {image_url}")
+            log_info(tr("Abriendo URL de imagen: {0}").format(image_url))
             
             # Usa la función de utils/resource_utils.py
             from utils.resource_utils import open_url
             success = open_url(image_url)
             
             if not success:
-                log_error("Fallo al abrir URL")
+                log_error(tr("Fallo al abrir URL"))
         except Exception as e:
-            log_error(f"Error al abrir URL: {str(e)}")
+            log_error(tr("Error al abrir URL: {0}").format(str(e)))

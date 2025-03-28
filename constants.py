@@ -1,5 +1,11 @@
 import os
 from pathlib import Path
+from PyQt5.QtCore import QCoreApplication, QLocale
+
+# Función auxiliar para traducción
+def tr(text, context="Constants"):
+    """Función de traducción global para textos constantes"""
+    return QCoreApplication.translate(context, text)
 
 class Constants:
     """Centraliza las constantes de la aplicación."""
@@ -7,7 +13,7 @@ class Constants:
     # Información de la aplicación
     APP_NAME = "PyBingWallpaper"
     APP_VERSION = "1.0.0"
-    APP_COPYRIGHT = "Copyright © Python Version 2025"
+    APP_COPYRIGHT = tr("Copyright © Python Version 2025")
     
     # Constantes de UI
     class UI:
@@ -83,8 +89,54 @@ class Constants:
         # Límite de caracteres para título
         TITLE_CHAR_LIMIT_FACTOR = 70
 
-
-        MAIN_WINDOW_TITLE = "Python Bing Wallpaper Client"
+        # Textos de UI traducibles
+        MAIN_WINDOW_TITLE = tr("Python Bing Wallpaper Client")
+        
+        # Botones y etiquetas
+        MINIMIZE_BUTTON = tr("−")
+        SHARE_BUTTON = tr("⤴")
+        SETTINGS_BUTTON = tr("⚙")
+        PREVIOUS_BUTTON = tr("⟨ Anterior")
+        NEXT_BUTTON = tr("Siguiente ⟩")
+        LOADING_TEXT = tr("Cargando...")
+        DOWNLOADING_IMAGE = tr("Descargando imagen de Bing...")
+        DOWNLOADING_THUMBNAIL = tr("Descargando miniatura...")
+        WAIT_MESSAGE = tr("Por favor espere mientras se obtienen los datos iniciales")
+        IMAGE_NOT_AVAILABLE = tr("Imagen no disponible")
+        LOAD_ERROR = tr("No se pudo cargar la imagen")
+        DOWNLOAD_ERROR = tr("Error al descargar")
+        UNTITLED = tr("Sin título disponible")
+        
+        # Títulos de menús
+        STARTUP_MENU_ITEM = tr("Iniciar con Windows")
+        SIZE_MENU_TITLE = tr("Ajustar tamaño")
+        LANGUAGE_MENU_TITLE = tr("Idioma")
+        OPEN_FAVORITES_MENU_ITEM = tr("Abrir carpeta de favoritos")
+        EXIT_MENU_ITEM = tr("Salir de la aplicación")
+        
+        # Opciones de idioma
+        LANGUAGE_SPANISH = tr("Español")
+        LANGUAGE_ENGLISH = tr("Inglés")
+        LANGUAGE_SYSTEM = tr("Usar idioma del sistema")
+        LANGUAGE_CHANGE_TITLE = tr("Cambio de idioma")
+        LANGUAGE_CHANGE_MESSAGE = tr("El cambio de idioma se aplicará al reiniciar la aplicación.")
+        LANGUAGE_SYSTEM_TITLE = tr("Idioma del sistema")
+        LANGUAGE_SYSTEM_MESSAGE = tr("Se usará el idioma del sistema al reiniciar la aplicación.")
+        
+        # Tamaños predefinidos
+        SIZE_SMALL = tr("Pequeño")
+        SIZE_MEDIUM = tr("Mediano")
+        SIZE_LARGE = tr("Grande")
+        SIZE_XLARGE = tr("Muy grande")
+        
+        # Mensajes de error
+        ERROR_LOAD_WALLPAPER = tr("No se pudo cargar el wallpaper")
+        ERROR_TRY_LATER = tr("Intente más tarde o reinicie la aplicación")
+        ERROR_URL_OPEN = tr("Fallo al abrir URL")
+        ERROR_URL_OPEN_DETAIL = tr("Error al abrir URL: {0}")
+        NO_URL_AVAILABLE = tr("No hay URL de imagen disponible")
+        OPEN_URL_INFO = tr("Abriendo URL de imagen: {0}")
+        SHARE_BUTTON_PRESSED = tr("Botón compartir presionado")
     
     # Constantes de red
     class Network:
@@ -113,12 +165,12 @@ class Constants:
         # Separador para el log
         LOG_SEPARATOR_CHAR = "="
     
-    # Opciones de tamaño de zoom
+    # Opciones de tamaño de zoom con textos traducibles
     ZOOM_OPTIONS = [
-        ("Pequeño", 1.0),
-        ("Mediano", 1.3),
-        ("Grande", 1.6),
-        ("Muy grande", 2.0)
+        (tr("Pequeño"), 1.0),
+        (tr("Mediano"), 1.3),
+        (tr("Grande"), 1.6),
+        (tr("Muy grande"), 2.0)
     ]
     
     # Factor de zoom predeterminado para la interfaz
@@ -200,8 +252,11 @@ class Constants:
     @staticmethod
     def get_wallpaper_info_url(idx=0, count=1):
         """Obtiene la URL de la información del fondo de pantalla."""
+        # Obtiene el código de idioma para la API de Bing
+        # Nota: Esto es independiente del idioma de la interfaz
+        # Para la API usamos "en-US" por defecto, pero se podría personalizar
         return f"https://www.bing.com/HPImageArchive.aspx?format=xml&idx={idx}&n={count}&mkt=en-US"
-    
+        
     @staticmethod
     def get_picture_url_format():
         """Obtiene el formato de la URL de la imagen."""
@@ -216,3 +271,9 @@ class Constants:
     def get_bing_website_url():
         """Obtiene la URL del sitio web de Bing Wallpaper."""
         return "https://www.bing.com/wallpaper"
+
+    @staticmethod
+    def get_translations_path():
+        """Obtiene la ruta donde se guardan los archivos de traducción."""
+        # Normalmente los archivos de traducción se guardan junto a la aplicación
+        return Path(os.path.dirname(os.path.abspath(__file__))) / "translations"

@@ -3,16 +3,16 @@ import sys
 import psutil
 from pathlib import Path
 from PIL import Image, ImageDraw
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QLocale, QTranslator
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
 
-from constants import Constants
+from constants import Constants, tr
 from core.bing_wallpaper_service import WallpaperManager
 from ui import WallpaperNavigatorWindow
 from sys_platform.windows.startup import StartupManager
 from utils.logger import log_info, log_error
-from utils.file_utils import file_exists, write_json, delete_file
+from utils.file_utils import file_exists, write_json, delete_file, read_json
 
 class BingWallpaperApp:
     """Clase principal de la aplicación."""
@@ -20,6 +20,12 @@ class BingWallpaperApp:
     def __init__(self):
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)  # Permite ejecutar en segundo plano
+        
+        # Inicializa la variable del idioma actual
+        self.current_language = None
+        
+        # Configurar internacionalización
+        self.setup_translation()
         
         self.wallpaper_manager = WallpaperManager()
         self.navigator_window = None
@@ -40,6 +46,68 @@ class BingWallpaperApp:
         
         # Registra un callback para recrear las ventanas cuando cambie el zoom
         self.wallpaper_manager.zoom_changed.connect(self.handle_zoom_change)
+    
+    def setup_translation(self):
+        """Configura el sistema de traducción según el idioma del sistema o preferencia del usuario."""
+        self.translator = QTranslator()
+        
+        # Verificar si existe una preferencia de idioma guardada
+        language_file = Constants.get_data_path() / "language.json"
+        language_settings = read_json(language_file, None)
+        
+        # Obtiene el idioma del sistema por defecto
+        system_locale = QLocale.system().name()
+        system_language = system_locale.split('_')[0]  # Por ejemplo, "es" de "es_ES"
+        
+        # Determinar qué idioma usar
+        preferred_language = None
+        if language_settings and "language" in language_settings:
+            preferred_language = language_settings["language"]
+            log_info(f"Usando idioma preferido por el usuario: {preferred_language}")
+        else:
+            preferred_language = system_language
+            log_info(f"Idioma del sistema detectado: {system_locale}")
+        
+        # Guarda el idioma actual para que la UI pueda consultarlo
+        self.current_language = preferred_language
+        
+        # Intentamos cargar el archivo de traducción correspondiente
+        translations_path = Constants.get_translations_path()
+        
+        # Creamos el directorio de traducciones si no existe
+        translations_path.mkdir(parents=True, exist_ok=True)
+        
+        # Intentamos cargar la traducción
+        translation_loaded = False
+        
+        # Primero intentamos la traducción específica para el idioma preferido
+        if translations_path.exists():
+            # Intentar con locale completo primero (es_ES)
+            if preferred_language == system_language:
+                translation_file = translations_path / f"pybingwallpaper_{system_locale}.qm"
+                if file_exists(translation_file):
+                    if self.translator.load(str(translation_file)):
+                        translation_loaded = True
+                        log_info(f"Traducción cargada: {translation_file}")
+            
+            # Si no se cargó o se usa un idioma personalizado, intentar con el código de idioma genérico
+            if not translation_loaded:
+                translation_file = translations_path / f"pybingwallpaper_{preferred_language}.qm"
+                if file_exists(translation_file):
+                    if self.translator.load(str(translation_file)):
+                        translation_loaded = True
+                        log_info(f"Traducción cargada: {translation_file}")
+        
+        # Si se cargó alguna traducción, la instalamos en la aplicación
+        if translation_loaded:
+            self.app.installTranslator(self.translator)
+            log_info("Traductor instalado en la aplicación")
+        else:
+            log_info("No se encontró archivo de traducción, usando textos predeterminados")
+    
+    def get_current_language(self):
+        """Devuelve el idioma actual de la aplicación."""
+        return self.current_language
     
     def handle_zoom_change(self, new_zoom_factor):
         """Maneja el cambio en el factor de zoom."""
@@ -105,12 +173,12 @@ class BingWallpaperApp:
         tray_menu = QMenu()
         
         # Acción para abrir el navegador de wallpapers
-        navigator_action = QAction("Explorar fondos de pantalla", self.app)
+        navigator_action = QAction(tr("Explorar fondos de pantalla"), self.app)
         navigator_action.triggered.connect(self.show_navigator_window)
         tray_menu.addAction(navigator_action)
         
         # Opción para iniciar con Windows
-        startup_action = QAction("Iniciar con Windows", self.app)
+        startup_action = QAction(tr("Iniciar con Windows"), self.app)
         startup_action.setCheckable(True)
         startup_action.setChecked(StartupManager.get_run_on_startup())
         startup_action.triggered.connect(lambda checked: StartupManager.set_run_on_startup(checked))
@@ -119,7 +187,7 @@ class BingWallpaperApp:
         tray_menu.addSeparator()
         
         # Acción para salir
-        exit_action = QAction("Salir", self.app)
+        exit_action = QAction(tr("Salir"), self.app)
         exit_action.triggered.connect(self.app.quit)
         tray_menu.addAction(exit_action)
         
@@ -195,7 +263,7 @@ class BingWallpaperApp:
     def show_navigator_window(self):
         """Muestra la ventana de navegación de wallpapers."""
         if not self.navigator_window:
-            self.navigator_window = WallpaperNavigatorWindow(self.wallpaper_manager)
+            self.navigator_window = WallpaperNavigatorWindow(self.wallpaper_manager, self)
         else:
             self.navigator_window.update_content()
         
@@ -212,7 +280,7 @@ class BingWallpaperApp:
         self.setup_tray_icon()
         
         # Crea la ventana de navegación
-        self.navigator_window = WallpaperNavigatorWindow(self.wallpaper_manager)
+        self.navigator_window = WallpaperNavigatorWindow(self.wallpaper_manager, self)
         
         # Si no se especifica /background, muestra la ventana
         if not self.running_in_background:
